@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resume Copilot</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <header class="panel-header">
+        <div>
+          <h1>Resume Copilot</h1>
+          <p>BOSS 候选人简历分析</p>
+        </div>
+        <button id="openOptionsButton" class="icon-button" type="button" title="打开设置">设置</button>
+      </header>
+
+      <section class="control-block">
+        <label>
+          <span>匹配岗位</span>
+          <select id="profileSelect"></select>
+        </label>
+        <button id="analyzeButton" type="button">抓取并分析</button>
+        <p id="statusText" class="status"></p>
+      </section>
+
+      <section id="captureBlock" class="capture-block" hidden>
+        <h2>采集结果</h2>
+        <p id="captureSummary"></p>
+      </section>
+
+      <section id="reportRoot" class="report" hidden></section>
+    </main>
+
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

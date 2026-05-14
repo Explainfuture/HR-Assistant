@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Resume Copilot",
+  "version": "0.1.0",
+  "description": "Analyze BOSS candidate resumes against locally maintained JD profiles.",
+  "permissions": ["storage", "sidePanel", "activeTab"],
+  "host_permissions": [
+    "https://www.zhipin.com/*",
+    "https://*.zhipin.com/*",
+    "https://api.deepseek.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Resume Copilot"
+  },
+  "options_page": "options/options.html",
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.zhipin.com/*", "https://*.zhipin.com/*"],
+      "js": ["content/bossResumeExtractor.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

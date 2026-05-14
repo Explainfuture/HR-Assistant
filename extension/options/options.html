@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resume Copilot Options</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="page-header">
+        <div>
+          <h1>Resume Copilot</h1>
+          <p>配置 DeepSeek，并维护用于 BOSS 简历分析的岗位知识库。</p>
+        </div>
+        <span class="badge">BOSS MVP</span>
+      </header>
+
+      <section class="section">
+        <div class="section-title">
+          <h2>API 设置</h2>
+          <p>API Key 保存在本机插件存储中，适合个人原型。</p>
+        </div>
+        <div class="field-grid">
+          <label>
+            <span>DeepSeek API Key</span>
+            <input id="apiKeyInput" type="password" autocomplete="off" placeholder="sk-..." />
+          </label>
+          <label>
+            <span>模型</span>
+            <input id="modelInput" type="text" value="deepseek-v4-pro" />
+          </label>
+        </div>
+        <div class="actions">
+          <button id="saveSettingsButton" type="button">保存设置</button>
+          <span id="settingsStatus" class="status"></span>
+        </div>
+      </section>
+
+      <section class="section two-column">
+        <div class="composer">
+          <div class="section-title">
+            <h2>生成岗位 JSON</h2>
+            <p>粘贴 JD 后让 DeepSeek 结构化，生成后可继续手动编辑。</p>
+          </div>
+          <label>
+            <span>JD 文本</span>
+            <textarea id="jdInput" rows="14" placeholder="粘贴岗位 JD..."></textarea>
+          </label>
+          <div class="actions">
+            <button id="generateProfileButton" type="button">生成岗位 JSON</button>
+            <button id="clearEditorButton" class="secondary" type="button">清空编辑区</button>
+            <span id="generateStatus" class="status"></span>
+          </div>
+        </div>
+
+        <div class="editor">
+          <div class="section-title">
+            <h2>岗位知识库</h2>
+            <p>JSON 校验通过后保存到本地。</p>
+          </div>
+          <label>
+            <span>已保存岗位</span>
+            <select id="profileSelect"></select>
+          </label>
+          <label>
+            <span>岗位 JSON</span>
+            <textarea id="jsonEditor" class="json-editor" rows="18" spellcheck="false"></textarea>
+          </label>
+          <div class="actions">
+            <button id="saveProfileButton" type="button">保存岗位</button>
+            <button id="formatProfileButton" class="secondary" type="button">格式化</button>
+            <button id="deleteProfileButton" class="danger" type="button">删除</button>
+            <span id="profileStatus" class="status"></span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="options.js"></script>
+  </body>
+</html>
