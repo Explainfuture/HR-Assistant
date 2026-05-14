@@ -25,9 +25,9 @@ export function formatJson(value) {
 }
 
 export function ensureArray(value) {
-  if (Array.isArray(value)) return value.map((item) => compactText(item)).filter(Boolean);
+  if (Array.isArray(value)) return value.map((item) => normalizeArrayItem(item)).filter(Boolean);
   if (value == null || value === "") return [];
-  return [compactText(value)].filter(Boolean);
+  return [normalizeArrayItem(value)].filter(Boolean);
 }
 
 export function normalizeJobProfile(profile, fallbackJd = "") {
@@ -87,6 +87,30 @@ export function compactText(value) {
     .replace(/[\r\n\t]+/g, " ")
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+function normalizeArrayItem(value) {
+  if (value == null || value === "") return "";
+  if (Array.isArray(value)) return value.map((item) => normalizeArrayItem(item)).filter(Boolean);
+  if (typeof value === "object") return compactObject(value);
+  return compactText(value);
+}
+
+function compactObject(value) {
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, item]) => [
+        key,
+        typeof item === "string"
+          ? compactText(item)
+          : Array.isArray(item)
+            ? item.map((child) => normalizeArrayItem(child)).filter(Boolean)
+            : item && typeof item === "object"
+              ? compactObject(item)
+              : item
+      ])
+      .filter(([, item]) => item !== "" && item != null)
+  );
 }
 
 function extractFirstJsonObject(text) {

@@ -253,18 +253,67 @@ function listBlock(title, items) {
     if (typeof item === "string") {
       li.textContent = item;
     } else {
-      const titleNode = document.createElement("div");
-      titleNode.className = "item-title";
-      titleNode.textContent = item.project || item.claim || item.title || "条目";
-      const reasonNode = document.createElement("div");
-      reasonNode.textContent = item.reason || item.evidence || item.valueLevel || "";
-      li.append(titleNode, reasonNode);
+      li.append(renderObjectListItem(item));
     }
     list.append(li);
   }
 
   fragment.append(list);
   return fragment;
+}
+
+function renderObjectListItem(item) {
+  const fragment = document.createDocumentFragment();
+  const title =
+    item.project ||
+    item.claim ||
+    item.requirement ||
+    item.risk ||
+    item.signal ||
+    item.title ||
+    item.name ||
+    "条目";
+
+  const titleNode = document.createElement("div");
+  titleNode.className = "item-title";
+  titleNode.textContent = String(title);
+  fragment.append(titleNode);
+
+  const detailParts = [
+    item.reason,
+    item.evidence,
+    item.summary,
+    item.description,
+    item.strength ? `强度：${item.strength}` : "",
+    item.valueLevel ? `含金量：${item.valueLevel}` : "",
+    item.severity ? `严重度：${item.severity}` : ""
+  ].filter(Boolean);
+
+  if (detailParts.length) {
+    const detailNode = document.createElement("div");
+    detailNode.textContent = detailParts.join("；");
+    fragment.append(detailNode);
+    return fragment;
+  }
+
+  const fallback = Object.entries(item)
+    .filter(([key]) => !["project", "claim", "requirement", "risk", "signal", "title", "name"].includes(key))
+    .map(([key, value]) => `${key}: ${formatValue(value)}`)
+    .join("；");
+
+  if (fallback) {
+    const fallbackNode = document.createElement("div");
+    fallbackNode.textContent = fallback;
+    fragment.append(fallbackNode);
+  }
+
+  return fragment;
+}
+
+function formatValue(value) {
+  if (Array.isArray(value)) return value.map(formatValue).join("、");
+  if (value && typeof value === "object") return Object.values(value).map(formatValue).join("、");
+  return String(value ?? "");
 }
 
 function objectBlock(title, value) {
