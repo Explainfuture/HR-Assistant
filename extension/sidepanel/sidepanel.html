@@ -13,16 +13,34 @@
           <h1>Resume Copilot</h1>
           <p>BOSS 候选人简历分析</p>
         </div>
-        <button id="openOptionsButton" class="icon-button" type="button" title="打开设置">设置</button>
+        <button
+          id="openOptionsButton"
+          class="icon-button"
+          type="button"
+          title="打开设置"
+          aria-label="打开设置"
+        >
+          设置
+        </button>
       </header>
 
       <section class="control-block">
         <label>
           <span>匹配岗位</span>
-          <select id="profileSelect"></select>
+          <select id="profileSelect" name="selected-job-profile"></select>
         </label>
-        <button id="analyzeButton" type="button">抓取并分析</button>
-        <p id="statusText" class="status"></p>
+
+        <button id="analyzeBossButton" type="button">抓取 BOSS 页面并分析</button>
+
+        <div class="divider"><span>或</span></div>
+
+        <label>
+          <span>上传 PDF 简历</span>
+          <input id="pdfInput" name="resume-pdf" type="file" accept="application/pdf,.pdf" />
+        </label>
+        <button id="analyzePdfButton" class="secondary-button" type="button">解析 PDF 并分析</button>
+
+        <p id="statusText" class="status" role="status" aria-live="polite"></p>
       </section>
 
       <section id="captureBlock" class="capture-block" hidden>

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { formatJson, parseJsonLike } from "../extension/shared/jsonUtils.js";
+import { compactText, formatJson, parseJsonLike } from "../extension/shared/jsonUtils.js";
 
 const root = process.cwd();
 const manifestPath = join(root, "extension", "manifest.json");
@@ -30,7 +31,10 @@ const requiredFiles = [
   "extension/shared/storage.js",
   "extension/shared/deepseekClient.js",
   "extension/shared/prompts.js",
-  "extension/shared/jsonUtils.js"
+  "extension/shared/jsonUtils.js",
+  "extension/shared/pdfTextExtractor.js",
+  "extension/vendor/pdfjs/pdf.min.mjs",
+  "extension/vendor/pdfjs/pdf.worker.min.mjs"
 ];
 
 for (const file of requiredFiles) {
@@ -44,5 +48,11 @@ assert.deepEqual(parseJsonLike('模型输出：{"ok":true,"items":[1,2]}'), {
   items: [1, 2]
 });
 assert.equal(formatJson({ ok: true }), '{\n  "ok": true\n}');
+assert.equal(compactText("a\\nb\nc\t d"), "a b c d");
+
+const javascriptFiles = requiredFiles.filter((file) => /\.(mjs|js)$/.test(file));
+for (const file of javascriptFiles) {
+  execFileSync(process.execPath, ["--check", join(root, file)], { stdio: "pipe" });
+}
 
 console.log("Extension validation passed.");

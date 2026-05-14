@@ -1,3 +1,5 @@
+import { normalizeJobProfile } from "./jsonUtils.js";
+
 const SETTINGS_KEY = "resumeCopilot.settings";
 const JOB_PROFILES_KEY = "resumeCopilot.jobProfiles";
 
@@ -27,7 +29,9 @@ export async function saveSettings(settings) {
 
 export async function listJobProfiles() {
   const result = await chrome.storage.local.get(JOB_PROFILES_KEY);
-  return Array.isArray(result[JOB_PROFILES_KEY]) ? result[JOB_PROFILES_KEY] : [];
+  return Array.isArray(result[JOB_PROFILES_KEY])
+    ? result[JOB_PROFILES_KEY].map((profile) => normalizeJobProfile(profile))
+    : [];
 }
 
 export async function saveJobProfile(profile) {

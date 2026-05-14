@@ -5,5 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node scripts/validate-extension.mjs"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^5.7.284"
   }
 }

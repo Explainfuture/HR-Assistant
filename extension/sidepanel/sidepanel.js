@@ -1,8 +1,11 @@
 import { analyzeCandidate } from "../shared/deepseekClient.js";
+import { extractTextFromPdfFile } from "../shared/pdfTextExtractor.js";
 import { getSettings, listJobProfiles } from "../shared/storage.js";
 
 const profileSelect = document.querySelector("#profileSelect");
-const analyzeButton = document.querySelector("#analyzeButton");
+const analyzeBossButton = document.querySelector("#analyzeBossButton");
+const analyzePdfButton = document.querySelector("#analyzePdfButton");
+const pdfInput = document.querySelector("#pdfInput");
 const openOptionsButton = document.querySelector("#openOptionsButton");
 const statusText = document.querySelector("#statusText");
 const captureBlock = document.querySelector("#captureBlock");
@@ -19,46 +22,43 @@ openOptionsButton.addEventListener("click", () => {
   chrome.runtime.openOptionsPage();
 });
 
-analyzeButton.addEventListener("click", async () => {
-  try {
-    setBusy(true, "分析中...");
-    setStatus("正在检查配置...");
-    reportRoot.hidden = true;
-    captureBlock.hidden = true;
-
-    settings = await getSettings();
-    if (!settings.apiKey) throw new Error("请先在 Options 页面配置 DeepSeek API Key");
-
-    const profile = profiles.find((item) => item.id === profileSelect.value);
-    if (!profile) throw new Error("请先选择一个岗位知识库");
-
-    setStatus("正在抓取 BOSS 候选人弹层文本...");
-    const extraction = await extractResumeFromActiveTab();
-    if (!extraction?.ok) {
-      throw new Error(extraction?.error || "简历采集失败");
+analyzeBossButton.addEventListener("click", async () => {
+  await runAnalysis({
+    busyButton: analyzeBossButton,
+    busyLabel: "抓取中…",
+    idleLabel: "抓取 BOSS 页面并分析",
+    getResumeText: async () => {
+      setStatus("正在抓取 BOSS 候选人弹层文本…");
+      const extraction = await extractResumeFromActiveTab();
+      if (!extraction?.ok) {
+        throw new Error(extraction?.error || "简历采集失败");
+      }
+      if (!extraction.text || extraction.text.length < 80) {
+        throw new Error("采集到的简历文本过短，请确认已打开候选人简历弹层");
+      }
+      return {
+        text: extraction.text,
+        summary: `已采集 ${extraction.text.length} 个字符，展开 ${extraction.debug?.expandedClicks || 0} 次，滚动 ${extraction.debug?.scrollRounds || 0} 轮。`
+      };
     }
-    if (!extraction.text || extraction.text.length < 80) {
-      throw new Error("采集到的简历文本过短，请确认已打开候选人简历弹层");
+  });
+});
+
+analyzePdfButton.addEventListener("click", async () => {
+  await runAnalysis({
+    busyButton: analyzePdfButton,
+    busyLabel: "解析中…",
+    idleLabel: "解析 PDF 并分析",
+    getResumeText: async () => {
+      const file = pdfInput.files?.[0];
+      setStatus("正在解析 PDF 简历文本…");
+      const extraction = await extractTextFromPdfFile(file);
+      return {
+        text: extraction.text,
+        summary: `已从 PDF 提取 ${extraction.text.length} 个字符，共 ${extraction.pageCount} 页。`
+      };
     }
-
-    captureSummary.textContent = `已采集 ${extraction.text.length} 个字符，展开 ${extraction.debug?.expandedClicks || 0} 次，滚动 ${extraction.debug?.scrollRounds || 0} 轮。`;
-    captureBlock.hidden = false;
-
-    setStatus("正在调用 DeepSeek 生成分析...");
-    const analysis = await analyzeCandidate({
-      apiKey: settings.apiKey,
-      model: settings.model,
-      jobProfile: profile,
-      resumeText: extraction.text
-    });
-
-    renderReport(analysis);
-    setStatus("分析完成", "success");
-  } catch (error) {
-    setStatus(error.message || String(error), "error");
-  } finally {
-    setBusy(false, "抓取并分析");
-  }
+  });
 });
 
 async function init() {
@@ -71,7 +71,41 @@ async function init() {
   } else if (!profiles.length) {
     setStatus("请先在设置中新增岗位知识库");
   } else {
-    setStatus("打开 BOSS 候选人弹层后点击分析");
+    setStatus("请选择岗位，然后抓取 BOSS 页面或上传 PDF 分析");
+  }
+}
+
+async function runAnalysis({ busyButton, busyLabel, idleLabel, getResumeText }) {
+  try {
+    setBusy(busyButton, true, busyLabel);
+    setStatus("正在检查配置…");
+    reportRoot.hidden = true;
+    captureBlock.hidden = true;
+
+    settings = await getSettings();
+    if (!settings.apiKey) throw new Error("请先在 Options 页面配置 DeepSeek API Key");
+
+    const profile = profiles.find((item) => item.id === profileSelect.value);
+    if (!profile) throw new Error("请先选择一个岗位知识库");
+
+    const resume = await getResumeText();
+    captureSummary.textContent = resume.summary;
+    captureBlock.hidden = false;
+
+    setStatus("正在调用 DeepSeek 生成分析…");
+    const analysis = await analyzeCandidate({
+      apiKey: settings.apiKey,
+      model: settings.model,
+      jobProfile: profile,
+      resumeText: resume.text
+    });
+
+    renderReport(analysis);
+    setStatus("分析完成", "success");
+  } catch (error) {
+    setStatus(error.message || String(error), "error");
+  } finally {
+    setBusy(busyButton, false, idleLabel);
   }
 }
 
@@ -95,7 +129,7 @@ async function extractResumeFromActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) throw new Error("无法获取当前标签页");
   if (!tab.url?.includes("zhipin.com")) {
-    throw new Error("请在 BOSS 直聘页面使用此插件");
+    throw new Error("请在 BOSS 直聘页面使用此插件，或改用 PDF 上传分析");
   }
 
   return await chrome.tabs.sendMessage(tab.id, {
@@ -147,11 +181,12 @@ function renderReport(analysis) {
 
   reportRoot.append(section("面试追问", [listBlock("", analysis.interviewQuestions)]));
 
-  const copySection = section("复制总结", [
-    paragraph(lastConclusion || "暂无可复制总结。"),
-    copyButton()
-  ]);
-  reportRoot.append(copySection);
+  reportRoot.append(
+    section("复制总结", [
+      paragraph(lastConclusion || "暂无可复制总结。"),
+      copyButton()
+    ])
+  );
 }
 
 function section(title, children) {
@@ -258,7 +293,7 @@ function setStatus(message, type = "") {
   statusText.className = `status ${type}`.trim();
 }
 
-function setBusy(busy, label) {
-  analyzeButton.disabled = busy;
-  analyzeButton.textContent = label;
+function setBusy(button, busy, label) {
+  button.disabled = busy;
+  button.textContent = label;
 }

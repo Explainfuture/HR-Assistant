@@ -54,7 +54,7 @@ generateProfileButton.addEventListener("click", async () => {
     const settings = await getSettings();
     if (!settings.apiKey) throw new Error("请先保存 DeepSeek API Key");
 
-    setBusy(generateProfileButton, true, "生成中...");
+    setBusy(generateProfileButton, true, "生成中…");
     const profile = await createJobProfileFromJD({
       apiKey: settings.apiKey,
       model: settings.model,
@@ -76,7 +76,7 @@ clearEditorButton.addEventListener("click", () => {
 
 profileSelect.addEventListener("change", () => {
   const selected = profiles.find((item) => item.id === profileSelect.value);
-  jsonEditor.value = selected ? formatJson(selected) : "";
+  jsonEditor.value = selected ? formatJson(normalizeJobProfile(selected)) : "";
   setStatus(profileStatus, "");
 });
 
@@ -106,6 +106,11 @@ deleteProfileButton.addEventListener("click", async () => {
   await runWithStatus(profileStatus, async () => {
     const selectedId = profileSelect.value || parseJsonLike(jsonEditor.value).id;
     if (!selectedId) throw new Error("请选择要删除的岗位");
+    const selected = profiles.find((item) => item.id === selectedId);
+    const title = selected?.title || "当前岗位";
+    if (!confirm(`确定删除“${title}”？此操作无法撤销。`)) {
+      return "已取消删除";
+    }
     await deleteJobProfile(selectedId);
     jsonEditor.value = "";
     await refreshProfiles();
@@ -136,7 +141,7 @@ async function refreshProfiles(selectedId = "") {
 
 async function runWithStatus(node, task) {
   try {
-    setStatus(node, "处理中...");
+    setStatus(node, "处理中…");
     const message = await task();
     setStatus(node, message, "success");
   } catch (error) {

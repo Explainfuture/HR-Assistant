@@ -25,22 +25,22 @@ export function formatJson(value) {
 }
 
 export function ensureArray(value) {
-  if (Array.isArray(value)) return value;
+  if (Array.isArray(value)) return value.map((item) => compactText(item)).filter(Boolean);
   if (value == null || value === "") return [];
-  return [String(value)];
+  return [compactText(value)].filter(Boolean);
 }
 
 export function normalizeJobProfile(profile, fallbackJd = "") {
   const now = new Date().toISOString();
   return {
     id: profile.id || createId(),
-    title: String(profile.title || "未命名岗位").trim(),
-    jd: String(profile.jd || fallbackJd || "").trim(),
+    title: compactText(profile.title || "未命名岗位"),
+    jd: compactText(profile.jd || fallbackJd || ""),
     mustHave: ensureArray(profile.mustHave),
     niceToHave: ensureArray(profile.niceToHave),
     riskFlags: ensureArray(profile.riskFlags),
     interviewFocus: ensureArray(profile.interviewFocus),
-    updatedAt: now
+    updatedAt: profile.updatedAt || now
   };
 }
 
@@ -78,6 +78,15 @@ export function createId() {
     return crypto.randomUUID();
   }
   return `profile-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+export function compactText(value) {
+  return String(value || "")
+    .replace(/\\n/g, " ")
+    .replace(/\\r/g, " ")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 function extractFirstJsonObject(text) {

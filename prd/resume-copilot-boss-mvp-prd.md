@@ -12,6 +12,7 @@ Resume Copilot 的第一版目标是做一个 Chrome 插件原型：在 HR 打�
 
 - Chrome Extension Manifest V3。
 - BOSS 直聘 HR 候选人简历弹层文本采集。
+- 插件侧边栏上传 PDF 简历，并在本地提取 PDF 文本。
 - 插件侧边栏中手动点击“抓取并分析”。
 - Options 页面配置 DeepSeek API Key。
 - Options 页面粘贴 JD 文本，并调用 DeepSeek 生成岗位知识库 JSON。
@@ -26,7 +27,7 @@ Resume Copilot 的第一版目标是做一个 Chrome 插件原型：在 HR 打�
 - 账号体系、团队协作、服务端同步。
 - 后端代理 API。
 - Moka 或其他招聘平台适配。
-- PDF/OCR 简历解析。
+- OCR 扫描件或图片简历解析。
 - 自动监听候选人变化并自动分析。
 - 自动扫描所有岗位并推荐最佳岗位。
 - 薪资和职级判断。
@@ -49,6 +50,14 @@ Resume Copilot 的第一版目标是做一个 Chrome 插件原型：在 HR 打�
 13. 插件将岗位 JSON 和简历文本发送给 DeepSeek。
 14. 插件展示分析报告。
 15. 用户复制备注总结，粘贴到招聘平台备注栏。
+
+PDF 上传分支：
+
+1. 用户在侧边栏选择岗位。
+2. 用户上传 PDF 简历。
+3. 插件本地提取 PDF 文本。
+4. 插件将岗位 JSON 和 PDF 简历文本发送给 DeepSeek。
+5. 插件复用同一套分析报告展示和复制流程。
 
 ## 4. Functional Requirements
 
@@ -94,7 +103,7 @@ Resume Copilot 的第一版目标是做一个 Chrome 插件原型：在 HR 打�
 
 ### 4.4 Resume Text Capture
 
-第一版采集目标是 BOSS 候选人弹层中已经解析出的简历文字，不处理 PDF 附件或图片简历。
+第一版采集目标包含两类文本来源：BOSS 候选人弹层中已经解析出的简历文字，以及用户手动上传的 PDF 简历文本。不处理扫描件、图片简历或 OCR。
 
 采集策略：
 
@@ -316,4 +325,3 @@ MVP 阶段可接受部分 BOSS 页面适配通过人工测试验证，因为真�
 - DeepSeek 返回内容可能不是严格 JSON，需要做容错解析和错误提示。
 - API Key 存在本地插件存储中，仅适合个人原型。
 - 如果候选人简历内容由图片、canvas 或附件承载，MVP 不解析。
-

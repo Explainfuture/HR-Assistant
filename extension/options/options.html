@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
+    <a class="skip-link" href="#settings">跳到设置</a>
     <main class="page">
       <header class="page-header">
         <div>
@@ -16,7 +17,7 @@
         <span class="badge">BOSS MVP</span>
       </header>
 
-      <section class="section">
+      <section id="settings" class="section">
         <div class="section-title">
           <h2>API 设置</h2>
           <p>API Key 保存在本机插件存储中，适合个人原型。</p>
@@ -24,16 +25,30 @@
         <div class="field-grid">
           <label>
             <span>DeepSeek API Key</span>
-            <input id="apiKeyInput" type="password" autocomplete="off" placeholder="sk-..." />
+            <input
+              id="apiKeyInput"
+              name="deepseek-api-key"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="sk-…"
+            />
           </label>
           <label>
             <span>模型</span>
-            <input id="modelInput" type="text" value="deepseek-v4-pro" />
+            <input
+              id="modelInput"
+              name="deepseek-model"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              value="deepseek-v4-pro"
+            />
           </label>
         </div>
         <div class="actions">
-          <button id="saveSettingsButton" type="button">保存设置</button>
-          <span id="settingsStatus" class="status"></span>
+          <button id="saveSettingsButton" type="button">保存 API 设置</button>
+          <span id="settingsStatus" class="status" role="status" aria-live="polite"></span>
         </div>
       </section>
 
@@ -45,12 +60,18 @@
           </div>
           <label>
             <span>JD 文本</span>
-            <textarea id="jdInput" rows="14" placeholder="粘贴岗位 JD..."></textarea>
+            <textarea
+              id="jdInput"
+              name="job-description"
+              rows="14"
+              autocomplete="off"
+              placeholder="粘贴岗位 JD…"
+            ></textarea>
           </label>
           <div class="actions">
             <button id="generateProfileButton" type="button">生成岗位 JSON</button>
             <button id="clearEditorButton" class="secondary" type="button">清空编辑区</button>
-            <span id="generateStatus" class="status"></span>
+            <span id="generateStatus" class="status" role="status" aria-live="polite"></span>
           </div>
         </div>
 
@@ -61,17 +82,24 @@
           </div>
           <label>
             <span>已保存岗位</span>
-            <select id="profileSelect"></select>
+            <select id="profileSelect" name="saved-job-profile"></select>
           </label>
           <label>
             <span>岗位 JSON</span>
-            <textarea id="jsonEditor" class="json-editor" rows="18" spellcheck="false"></textarea>
+            <textarea
+              id="jsonEditor"
+              class="json-editor"
+              name="job-profile-json"
+              rows="18"
+              autocomplete="off"
+              spellcheck="false"
+            ></textarea>
           </label>
           <div class="actions">
             <button id="saveProfileButton" type="button">保存岗位</button>
             <button id="formatProfileButton" class="secondary" type="button">格式化</button>
             <button id="deleteProfileButton" class="danger" type="button">删除</button>
-            <span id="profileStatus" class="status"></span>
+            <span id="profileStatus" class="status" role="status" aria-live="polite"></span>
           </div>
         </div>
       </section>
