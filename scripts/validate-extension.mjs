@@ -6,6 +6,7 @@ import {
   compactText,
   ensureArray,
   formatJson,
+  normalizeJobCategory,
   parseJsonLike
 } from "../extension/shared/jsonUtils.js";
 
@@ -18,6 +19,7 @@ const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 assert.equal(manifest.manifest_version, 3, "manifest should use MV3");
 assert.equal(manifest.permissions.includes("storage"), true, "storage permission is required");
 assert.equal(manifest.permissions.includes("sidePanel"), true, "sidePanel permission is required");
+assert.equal(manifest.permissions.includes("tabs"), true, "tabs permission is required");
 assert.equal(
   manifest.host_permissions.includes("https://api.deepseek.com/*"),
   true,
@@ -29,6 +31,9 @@ const requiredFiles = [
   "extension/options/options.html",
   "extension/options/options.css",
   "extension/options/options.js",
+  "extension/history/history.html",
+  "extension/history/history.css",
+  "extension/history/history.js",
   "extension/sidepanel/sidepanel.html",
   "extension/sidepanel/sidepanel.css",
   "extension/sidepanel/sidepanel.js",
@@ -37,6 +42,7 @@ const requiredFiles = [
   "extension/shared/deepseekClient.js",
   "extension/shared/prompts.js",
   "extension/shared/jsonUtils.js",
+  "extension/shared/candidateUtils.js",
   "extension/shared/pdfTextExtractor.js",
   "extension/vendor/pdfjs/pdf.min.mjs",
   "extension/vendor/pdfjs/pdf.worker.min.mjs"
@@ -54,6 +60,8 @@ assert.deepEqual(parseJsonLike('模型输出：{"ok":true,"items":[1,2]}'), {
 });
 assert.equal(formatJson({ ok: true }), '{\n  "ok": true\n}');
 assert.equal(compactText("a\\nb\nc\t d"), "a b c d");
+assert.equal(normalizeJobCategory("", "品牌投放经理", ""), "市场");
+assert.equal(normalizeJobCategory("销售", "Java 工程师", ""), "销售");
 assert.deepEqual(ensureArray([{ project: "Agent eval", reason: "Strong evidence\\nwith detail" }]), [
   { project: "Agent eval", reason: "Strong evidence with detail" }
 ]);

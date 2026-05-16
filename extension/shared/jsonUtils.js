@@ -24,6 +24,48 @@ export function formatJson(value) {
   return JSON.stringify(value, null, 2);
 }
 
+export const JOB_CATEGORIES = ["研发", "产品", "市场", "销售", "职能"];
+
+const CATEGORY_KEYWORDS = {
+  研发: [
+    "研发",
+    "开发",
+    "工程师",
+    "架构",
+    "前端",
+    "后端",
+    "全栈",
+    "算法",
+    "数据",
+    "测试",
+    "运维",
+    "ios",
+    "android",
+    "java",
+    "python",
+    "go",
+    "c++"
+  ],
+  产品: ["产品", "pm", "需求", "用户体验", "交互", "增长产品"],
+  市场: ["市场", "运营", "pr", "公关", "品牌", "投放", "内容", "新媒体", "增长"],
+  销售: ["销售", "商务", "解决方案", "交付", "客户成功", "售前", "渠道"],
+  职能: ["职能", "采购", "hr", "人力", "招聘", "财务", "法务", "行政", "组织发展"]
+};
+
+export function normalizeJobCategory(category, title = "", jd = "") {
+  const explicit = compactText(category);
+  if (JOB_CATEGORIES.includes(explicit)) return explicit;
+
+  const haystack = `${title} ${jd}`.toLowerCase();
+  for (const [candidate, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    if (keywords.some((keyword) => haystack.includes(keyword.toLowerCase()))) {
+      return candidate;
+    }
+  }
+
+  return "职能";
+}
+
 export function ensureArray(value) {
   if (Array.isArray(value)) return value.map((item) => normalizeArrayItem(item)).filter(Boolean);
   if (value == null || value === "") return [];
@@ -32,10 +74,14 @@ export function ensureArray(value) {
 
 export function normalizeJobProfile(profile, fallbackJd = "") {
   const now = new Date().toISOString();
+  const title = compactText(profile.title || "未命名岗位");
+  const jd = compactText(profile.jd || fallbackJd || "");
+
   return {
     id: profile.id || createId(),
-    title: compactText(profile.title || "未命名岗位"),
-    jd: compactText(profile.jd || fallbackJd || ""),
+    title,
+    category: normalizeJobCategory(profile.category, title, jd),
+    jd,
     mustHave: ensureArray(profile.mustHave),
     niceToHave: ensureArray(profile.niceToHave),
     riskFlags: ensureArray(profile.riskFlags),
@@ -46,6 +92,7 @@ export function normalizeJobProfile(profile, fallbackJd = "") {
 
 export function normalizeAnalysis(analysis, selectedProfile) {
   return {
+    candidateName: compactText(analysis?.candidateName || ""),
     matchedRole: {
       roleId: analysis?.matchedRole?.roleId || selectedProfile.id,
       roleName: analysis?.matchedRole?.roleName || selectedProfile.title,

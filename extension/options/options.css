@@ -53,6 +53,13 @@ body {
   margin-bottom: 24px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
 h1,
 h2,
 p {
@@ -254,6 +261,10 @@ button.danger:hover {
   .two-column,
   .field-grid {
     grid-template-columns: 1fr;
+  }
+
+  .page-header {
+    display: grid;
   }
 
   .two-column {

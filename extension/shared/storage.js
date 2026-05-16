@@ -1,7 +1,10 @@
-import { normalizeJobProfile } from "./jsonUtils.js";
+import { compactText, createId, normalizeJobProfile } from "./jsonUtils.js";
+import { isCandidateNameRecognized } from "./candidateUtils.js";
 
 const SETTINGS_KEY = "resumeCopilot.settings";
 const JOB_PROFILES_KEY = "resumeCopilot.jobProfiles";
+const ANALYSIS_HISTORY_KEY = "resumeCopilot.analysisHistory";
+const MAX_ANALYSIS_HISTORY = 50;
 
 const DEFAULT_SETTINGS = {
   apiKey: "",
@@ -51,4 +54,62 @@ export async function deleteJobProfile(id) {
   const nextProfiles = profiles.filter((item) => item.id !== id);
   await chrome.storage.local.set({ [JOB_PROFILES_KEY]: nextProfiles });
   return nextProfiles;
+}
+
+export async function listAnalysisHistory() {
+  const result = await chrome.storage.local.get(ANALYSIS_HISTORY_KEY);
+  return Array.isArray(result[ANALYSIS_HISTORY_KEY])
+    ? result[ANALYSIS_HISTORY_KEY].map(normalizeAnalysisHistoryEntry).filter(Boolean)
+    : [];
+}
+
+export async function saveAnalysisHistoryEntry(entry) {
+  const history = await listAnalysisHistory();
+  const nextEntry = normalizeAnalysisHistoryEntry(entry);
+  const nextHistory = [nextEntry, ...history]
+    .filter(Boolean)
+    .slice(0, MAX_ANALYSIS_HISTORY);
+
+  await chrome.storage.local.set({ [ANALYSIS_HISTORY_KEY]: nextHistory });
+  return nextHistory;
+}
+
+export async function clearAnalysisHistory() {
+  await chrome.storage.local.remove(ANALYSIS_HISTORY_KEY);
+  return [];
+}
+
+export async function updateAnalysisHistoryEntry(id, patch) {
+  const history = await listAnalysisHistory();
+  const nextHistory = history.map((entry) =>
+    entry.id === id ? normalizeAnalysisHistoryEntry({ ...entry, ...patch }) : entry
+  );
+  await chrome.storage.local.set({ [ANALYSIS_HISTORY_KEY]: nextHistory });
+  return nextHistory;
+}
+
+function normalizeAnalysisHistoryEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+
+  const profile = entry.profile || {};
+  const candidateName = compactText(entry.candidateName || entry.analysis?.candidateName || "");
+  return {
+    id: compactText(entry.id) || createId(),
+    taskId: compactText(entry.taskId || ""),
+    createdAt: compactText(entry.createdAt) || new Date().toISOString(),
+    source: compactText(entry.source || "未知来源"),
+    candidateName: isCandidateNameRecognized(candidateName) ? candidateName : "姓名未识别",
+    resumeSummary: compactText(entry.resumeSummary || ""),
+    resumePreview: compactText(entry.resumePreview || "").slice(0, 180),
+    profile: {
+      id: compactText(profile.id || entry.profileId || ""),
+      title: compactText(profile.title || entry.profileTitle || "未命名岗位"),
+      category: compactText(profile.category || entry.profileCategory || "未分类")
+    },
+    matchScore: Number(entry.matchScore ?? 0),
+    recommendation: compactText(entry.recommendation || "需要人工复核"),
+    copyableConclusion: compactText(entry.copyableConclusion || "").slice(0, 320),
+    analysis: entry.analysis && typeof entry.analysis === "object" ? entry.analysis : null,
+    batchResults: Array.isArray(entry.batchResults) ? entry.batchResults.slice(0, 50) : []
+  };
 }

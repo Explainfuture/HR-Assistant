@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resume Copilot History</title>
+    <link rel="stylesheet" href="history.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#historyList">跳到候选人列表</a>
+    <main class="page">
+      <header class="page-header">
+        <div>
+          <h1>候选人解析历史</h1>
+          <p id="historySummary">查看本地已完成解析的候选人结果。</p>
+        </div>
+        <div class="header-actions">
+          <button id="clearHistoryButton" class="danger" type="button">清空历史</button>
+          <button id="closeHistoryButton" class="secondary" type="button">关闭</button>
+        </div>
+      </header>
+
+      <section class="history-layout">
+        <aside class="candidate-panel" aria-labelledby="candidateListTitle">
+          <div class="panel-title">
+            <h2 id="candidateListTitle">候选人</h2>
+            <span id="candidateCount" class="count-badge">0</span>
+          </div>
+          <div id="historyList" class="history-list"></div>
+        </aside>
+
+        <section class="detail-panel" aria-labelledby="detailTitle">
+          <div class="detail-header">
+            <div>
+              <h2 id="detailTitle">解析详情</h2>
+              <p id="detailMeta">选择一位候选人查看报告。</p>
+            </div>
+            <div class="detail-actions">
+              <button id="renameCandidateButton" class="secondary" type="button" disabled>
+                修改姓名
+              </button>
+              <button id="copyConclusionButton" class="secondary" type="button" disabled>
+                复制备注总结
+              </button>
+            </div>
+          </div>
+          <div id="reportRoot" class="report"></div>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="history.js"></script>
+  </body>
+</html>

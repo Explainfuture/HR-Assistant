@@ -1,5 +1,9 @@
 (function () {
   const MESSAGE_TYPE = "RESUME_COPILOT_EXTRACT_RESUME";
+  const NAME_LABEL_RE = /(?:姓名|候选人|人才)[:：\s]+([\u4e00-\u9fa5·]{2,8})/;
+  const CHINESE_NAME_RE = /^[\u4e00-\u9fa5·]{2,6}$/;
+  const NAME_NOISE_RE =
+    /boss|直聘|沟通|在线|简历|求职|附件|工作经历|教育经历|项目经历|个人优势|自我评价|岗位|职位|浏览|联系|期望|学历|年龄|经验|优势|技能|公司|项目|作品|自定义|添加|打招呼|交换|电话|微信|立即|查看|收藏|备注|编辑|男|女/i;
   const EXPAND_TEXT_RE = /展开|查看更多|完整经历|显示更多|更多|查看全部|全部展开/;
   const RESUME_KEYWORDS = [
     "工作经历",
@@ -83,8 +87,39 @@
     return {
       ok: true,
       text,
+      candidateName: inferCandidateName(text, container),
       debug
     };
+  }
+
+  function inferCandidateName(text, container) {
+    const labeled = String(text || "").match(NAME_LABEL_RE)?.[1];
+    if (isLikelyName(labeled)) return labeled;
+
+    const headingSelectors = [
+      ".name",
+      ".user-name",
+      ".geek-name",
+      ".candidate-name",
+      ".resume-name",
+      "h1",
+      "h2",
+      "h3"
+    ];
+    const headingName = [...container.querySelectorAll(headingSelectors.join(","))]
+      .map((node) => normalizeLine(node.textContent))
+      .find(isLikelyName);
+    if (headingName) return headingName;
+
+    return String(text || "")
+      .split(/\n+/)
+      .map(normalizeLine)
+      .find(isLikelyName) || "姓名未识别";
+  }
+
+  function isLikelyName(value) {
+    const name = normalizeLine(value);
+    return CHINESE_NAME_RE.test(name) && !NAME_NOISE_RE.test(name);
   }
 
   function findCandidateContainer() {

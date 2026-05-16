@@ -11,41 +11,77 @@
       <header class="panel-header">
         <div>
           <h1>Resume Copilot</h1>
-          <p>BOSS 候选人简历分析</p>
+          <p>候选人后台解析队列</p>
         </div>
-        <button
-          id="openOptionsButton"
-          class="icon-button"
-          type="button"
-          title="打开设置"
-          aria-label="打开设置"
-        >
-          设置
-        </button>
+        <div class="header-actions">
+          <button id="refreshButton" class="icon-button" type="button">刷新</button>
+          <button id="historyButton" class="icon-button" type="button">历史</button>
+          <button
+            id="openOptionsButton"
+            class="icon-button"
+            type="button"
+            title="打开设置"
+            aria-label="打开设置"
+          >
+            设置
+          </button>
+        </div>
       </header>
 
       <section class="control-block">
         <label>
-          <span>匹配岗位</span>
+          <span>岗位大类</span>
+          <select id="categorySelect" name="selected-job-category"></select>
+        </label>
+
+        <label>
+          <span>指定评估岗位</span>
           <select id="profileSelect" name="selected-job-profile"></select>
         </label>
 
-        <button id="analyzeBossButton" type="button">抓取 BOSS 页面并分析</button>
+        <div class="source-group">
+          <div class="source-title">
+            <h2>当前 BOSS 简历</h2>
+            <p>先打开候选人详情，再把当前页面提交到后台。</p>
+          </div>
+          <button id="autoMatchBossButton" type="button">自动判断适合哪个岗位</button>
+          <button id="analyzeBossButton" class="secondary-button" type="button">
+            按上方指定岗位评估
+          </button>
+        </div>
 
         <div class="divider"><span>或</span></div>
 
-        <label>
-          <span>上传 PDF 简历</span>
-          <input id="pdfInput" name="resume-pdf" type="file" accept="application/pdf,.pdf" />
-        </label>
-        <button id="analyzePdfButton" class="secondary-button" type="button">解析 PDF 并分析</button>
+        <div class="source-group">
+          <div class="source-title">
+            <h2>PDF 简历文件</h2>
+            <p>上传附件简历后提交到后台解析。</p>
+          </div>
+          <label>
+            <span>选择 PDF</span>
+            <input id="pdfInput" name="resume-pdf" type="file" accept="application/pdf,.pdf" />
+          </label>
+          <button id="autoMatchPdfButton" type="button">自动判断适合哪个岗位</button>
+          <button id="analyzePdfButton" class="secondary-button" type="button">
+            按上方指定岗位评估
+          </button>
+        </div>
+
+        <button id="reanalyzeLastButton" class="secondary-button" type="button" disabled>
+          复用上次简历，按指定岗位再评估
+        </button>
 
         <p id="statusText" class="status" role="status" aria-live="polite"></p>
       </section>
 
       <section id="captureBlock" class="capture-block" hidden>
-        <h2>采集结果</h2>
+        <h2>最近提交</h2>
         <p id="captureSummary"></p>
+      </section>
+
+      <section class="task-block" aria-labelledby="taskTitle">
+        <h2 id="taskTitle">后台任务</h2>
+        <div id="taskList" class="task-list"></div>
       </section>
 
       <section id="reportRoot" class="report" hidden></section>

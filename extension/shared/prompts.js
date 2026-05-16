@@ -12,6 +12,7 @@ export function buildJobProfileMessages(jdText) {
 输出字段必须为：
 {
   "title": "岗位名",
+  "category": "研发/产品/市场/销售/职能",
   "jd": "原始JD全文",
   "mustHave": ["硬性要求"],
   "niceToHave": ["加分项"],
@@ -21,6 +22,7 @@ export function buildJobProfileMessages(jdText) {
 
 要求：
 - title 从 JD 中提取；如果无法判断，使用最接近的岗位名。
+- category 必须从“研发、产品、市场、销售、职能”中选择一个；市场包含运营、PR、品牌、投放等；销售包含销售、解决方案、交付经理等；职能包含采购、HR 等。
 - mustHave 只放真正影响筛选的硬性要求。
 - niceToHave 放增强匹配但不是必须的条件。
 - riskFlags 要能辅助 HR 判断候选人是否在包装经历。
@@ -52,6 +54,7 @@ ${resumeText}
 
 输出必须严格符合下面 JSON 结构：
 {
+  "candidateName": "候选人真实姓名；如果简历未明确体现，返回空字符串",
   "matchedRole": {
     "roleId": "${jobProfile.id}",
     "roleName": "${jobProfile.title}",
@@ -104,6 +107,7 @@ ${resumeText}
 }
 
 判断标准：
+- candidateName 只能从简历文本中明确出现的人名提取，不能使用“自定义添加”“打招呼”“沟通”等页面操作文案，也不能猜测。
 - 有含金量：角色清楚、负责边界清楚、有复杂问题、有业务结果或指标变化、有上线规模、有具体产品/技术/业务决策。
 - 疑似包装：只堆关键词、个人贡献模糊、只写参与/负责但无细节、项目名很大但职责很虚、热词多但没有指标/流程/落地结果。
 - 如果简历中缺少年龄、学历、离职时间等信息，不要编造，写“简历未明确体现”。

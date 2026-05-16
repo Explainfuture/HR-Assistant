@@ -1,5 +1,10 @@
 import { createJobProfileFromJD } from "../shared/deepseekClient.js";
-import { formatJson, normalizeJobProfile, parseJsonLike } from "../shared/jsonUtils.js";
+import {
+  formatJson,
+  JOB_CATEGORIES,
+  normalizeJobProfile,
+  parseJsonLike
+} from "../shared/jsonUtils.js";
 import {
   deleteJobProfile,
   getSettings,
@@ -12,6 +17,7 @@ const apiKeyInput = document.querySelector("#apiKeyInput");
 const modelInput = document.querySelector("#modelInput");
 const saveSettingsButton = document.querySelector("#saveSettingsButton");
 const settingsStatus = document.querySelector("#settingsStatus");
+const closeOptionsButton = document.querySelector("#closeOptionsButton");
 
 const jdInput = document.querySelector("#jdInput");
 const generateProfileButton = document.querySelector("#generateProfileButton");
@@ -19,6 +25,7 @@ const clearEditorButton = document.querySelector("#clearEditorButton");
 const generateStatus = document.querySelector("#generateStatus");
 
 const profileSelect = document.querySelector("#profileSelect");
+const categorySelect = document.querySelector("#categorySelect");
 const jsonEditor = document.querySelector("#jsonEditor");
 const saveProfileButton = document.querySelector("#saveProfileButton");
 const formatProfileButton = document.querySelector("#formatProfileButton");
@@ -28,6 +35,13 @@ const profileStatus = document.querySelector("#profileStatus");
 let profiles = [];
 
 init();
+
+closeOptionsButton.addEventListener("click", () => {
+  window.close();
+  window.setTimeout(() => {
+    if (history.length > 1) history.back();
+  }, 120);
+});
 
 async function init() {
   const settings = await getSettings();
@@ -62,6 +76,7 @@ generateProfileButton.addEventListener("click", async () => {
     });
     jsonEditor.value = formatJson(profile);
     profileSelect.value = "";
+    categorySelect.value = profile.category || "";
     return "已生成，可检查后保存";
   }).finally(() => setBusy(generateProfileButton, false, "生成岗位 JSON"));
 });
@@ -70,6 +85,7 @@ clearEditorButton.addEventListener("click", () => {
   jdInput.value = "";
   jsonEditor.value = "";
   profileSelect.value = "";
+  categorySelect.value = "";
   setStatus(generateStatus, "");
   setStatus(profileStatus, "");
 });
@@ -77,7 +93,23 @@ clearEditorButton.addEventListener("click", () => {
 profileSelect.addEventListener("change", () => {
   const selected = profiles.find((item) => item.id === profileSelect.value);
   jsonEditor.value = selected ? formatJson(normalizeJobProfile(selected)) : "";
+  categorySelect.value = selected?.category || "";
   setStatus(profileStatus, "");
+});
+
+categorySelect.addEventListener("change", () => {
+  try {
+    const parsed = jsonEditor.value ? parseJsonLike(jsonEditor.value) : {};
+    jsonEditor.value = formatJson(
+      normalizeJobProfile({
+        ...parsed,
+        category: categorySelect.value || parsed.category
+      })
+    );
+    setStatus(profileStatus, "岗位大类已更新，保存后生效", "success");
+  } catch (error) {
+    setStatus(profileStatus, error.message, "error");
+  }
 });
 
 formatProfileButton.addEventListener("click", () => {
@@ -120,6 +152,7 @@ deleteProfileButton.addEventListener("click", async () => {
 
 async function refreshProfiles(selectedId = "") {
   profiles = await listJobProfiles();
+  renderCategoryOptions();
   profileSelect.innerHTML = "";
 
   const placeholder = document.createElement("option");
@@ -130,12 +163,30 @@ async function refreshProfiles(selectedId = "") {
   for (const profile of profiles) {
     const option = document.createElement("option");
     option.value = profile.id;
-    option.textContent = profile.title || "未命名岗位";
+    option.textContent = `${profile.title || "未命名岗位"} · ${profile.category || "未分类"}`;
     profileSelect.append(option);
   }
 
   if (selectedId) {
     profileSelect.value = selectedId;
+    const selected = profiles.find((item) => item.id === selectedId);
+    categorySelect.value = selected?.category || "";
+  }
+}
+
+function renderCategoryOptions() {
+  categorySelect.innerHTML = "";
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "选择岗位大类";
+  categorySelect.append(placeholder);
+
+  for (const category of JOB_CATEGORIES) {
+    const option = document.createElement("option");
+    option.value = category;
+    option.textContent = category;
+    categorySelect.append(option);
   }
 }
 
