@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Resume Copilot History</title>
+    <link rel="stylesheet" href="../shared/ui.css" />
     <link rel="stylesheet" href="history.css" />
   </head>
   <body>
@@ -15,8 +16,8 @@
           <p id="historySummary">查看本地已完成解析的候选人结果。</p>
         </div>
         <div class="header-actions">
-          <button id="clearHistoryButton" class="danger" type="button">清空历史</button>
-          <button id="closeHistoryButton" class="secondary" type="button">关闭</button>
+          <button id="clearHistoryButton" class="button-danger" type="button">清空历史</button>
+          <button id="closeHistoryButton" class="button-secondary" type="button">关闭</button>
         </div>
       </header>
 
@@ -36,13 +37,13 @@
               <p id="detailMeta">选择一位候选人查看报告。</p>
             </div>
             <div class="detail-actions">
-              <button id="renameCandidateButton" class="secondary" type="button" disabled>
+              <button id="renameCandidateButton" class="button-secondary" type="button" disabled>
                 修改姓名
               </button>
-              <button id="deleteCandidateButton" class="danger" type="button" disabled>
+              <button id="deleteCandidateButton" class="button-danger" type="button" disabled>
                 删除该记录
               </button>
-              <button id="copyConclusionButton" class="secondary" type="button" disabled>
+              <button id="copyConclusionButton" class="button-secondary" type="button" disabled>
                 复制备注总结
               </button>
             </div>

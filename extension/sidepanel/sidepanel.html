@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Resume Copilot</title>
+    <link rel="stylesheet" href="../shared/ui.css" />
     <link rel="stylesheet" href="sidepanel.css" />
   </head>
   <body>
@@ -14,11 +15,11 @@
           <p>候选人后台解析队列</p>
         </div>
         <div class="header-actions">
-          <button id="refreshButton" class="icon-button" type="button">刷新</button>
-          <button id="historyButton" class="icon-button" type="button">历史</button>
+          <button id="refreshButton" class="button-secondary button-compact" type="button">刷新</button>
+          <button id="historyButton" class="button-secondary button-compact" type="button">历史</button>
           <button
             id="openOptionsButton"
-            class="icon-button"
+            class="button-secondary button-compact"
             type="button"
             title="打开设置"
             aria-label="打开设置"
@@ -45,7 +46,7 @@
             <p>先打开候选人详情，再把当前页面提交到后台。</p>
           </div>
           <button id="autoMatchBossButton" type="button">自动判断适合哪个岗位</button>
-          <button id="analyzeBossButton" class="secondary-button" type="button">
+          <button id="analyzeBossButton" class="button-secondary" type="button">
             按上方指定岗位评估
           </button>
         </div>
@@ -62,12 +63,12 @@
             <input id="pdfInput" name="resume-pdf" type="file" accept="application/pdf,.pdf" />
           </label>
           <button id="autoMatchPdfButton" type="button">自动判断适合哪个岗位</button>
-          <button id="analyzePdfButton" class="secondary-button" type="button">
+          <button id="analyzePdfButton" class="button-secondary" type="button">
             按上方指定岗位评估
           </button>
         </div>
 
-        <button id="reanalyzeLastButton" class="secondary-button" type="button" disabled>
+        <button id="reanalyzeLastButton" class="button-secondary" type="button" disabled>
           复用上次简历，按指定岗位再评估
         </button>
 

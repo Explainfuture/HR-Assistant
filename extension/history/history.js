@@ -5,7 +5,8 @@ import {
   updateAnalysisHistoryEntry
 } from "../shared/storage.js";
 import { isCandidateNameRecognized } from "../shared/candidateUtils.js";
-import { SCORE_DIMENSIONS } from "../shared/jsonUtils.js";
+import { renderAnalysisReport } from "../shared/reportRenderer.js";
+import { markEntered, updateWithTransition } from "../shared/viewTransitions.js";
 
 const historySummary = document.querySelector("#historySummary");
 const candidateCount = document.querySelector("#candidateCount");
@@ -111,8 +112,10 @@ function renderHistoryList() {
     button.type = "button";
     button.setAttribute("aria-pressed", String(entry.id === selectedEntry?.id));
     button.addEventListener("click", () => {
-      selectedEntry = entry;
-      render();
+      updateWithTransition(() => {
+        selectedEntry = entry;
+        render();
+      });
     });
 
     const nameRow = document.createElement("span");
@@ -179,266 +182,18 @@ function renderSelectedEntry() {
 }
 
 function renderReport(analysis, batchResults = []) {
-  const role = analysis?.matchedRole || {};
   reportRoot.append(
-    section("匹配岗位", [
-      scoreRow(role.matchScore ?? selectedEntry?.matchScore, role.recommendation || selectedEntry?.recommendation),
-      scoreBreakdownBlock(analysis?.scoreBreakdown),
-      thresholdBlock(analysis?.thresholdChecks),
-      paragraph(role.roleName || selectedEntry?.profile?.title || "未命名岗位", "muted")
-    ])
+    renderAnalysisReport({
+      analysis,
+      batchResults,
+      fallbackProfileTitle: selectedEntry?.profile?.title || "未命名岗位",
+      fallbackScore: selectedEntry?.matchScore,
+      fallbackRecommendation: selectedEntry?.recommendation,
+      copyableConclusion: selectedEntry?.copyableConclusion || "",
+      headingLevel: 3
+    })
   );
-
-  if (batchResults.length) {
-    reportRoot.append(section("候选岗位评分", [rankingBlock(batchResults)]));
-  }
-
-  const experience = analysis?.experienceAnalysis || {};
-  reportRoot.append(
-    section("经验分析", [
-      paragraph(experience.oneLineProfile || "未返回一句话画像。"),
-      listBlock("匹配项目", experience.matchedProjects),
-      listBlock("不匹配项目", experience.mismatchedProjects),
-      listBlock("疑似包装点", experience.overclaimRisks),
-      listBlock("高含金量信号", experience.highValueSignals)
-    ])
-  );
-
-  const objective = analysis?.objectiveAnalysis || {};
-  reportRoot.append(
-    section("客观分析", [
-      objectBlock("学历", objective.education),
-      objectBlock("年龄/经验", objective.ageAndExperience),
-      objectBlock("离职状态", objective.employmentStatus)
-    ])
-  );
-
-  const elimination = analysis?.elimination || {};
-  reportRoot.append(
-    section("淘汰理由", [
-      elimination.shouldReject
-        ? listBlock("建议淘汰", elimination.reasons)
-        : paragraph("暂无硬性淘汰点。")
-    ])
-  );
-
-  reportRoot.append(section("面试追问", [listBlock("", analysis?.interviewQuestions)]));
-  reportRoot.append(section("复制总结", [paragraph(selectedEntry.copyableConclusion || "暂无可复制总结。")]));
-}
-
-function section(title, children) {
-  const node = document.createElement("section");
-  node.className = "report-section";
-  const heading = document.createElement("h3");
-  heading.textContent = title;
-  node.append(heading, ...children.filter(Boolean));
-  return node;
-}
-
-function scoreRow(score, recommendation) {
-  const row = document.createElement("div");
-  row.className = "score-row";
-
-  const scoreNode = document.createElement("div");
-  scoreNode.className = "score";
-  scoreNode.textContent = Number.isFinite(Number(score)) ? `${Number(score)}` : "-";
-
-  const recommendationNode = document.createElement("span");
-  recommendationNode.className = "recommendation";
-  recommendationNode.textContent = recommendation || "需要人工复核";
-
-  row.append(scoreNode, recommendationNode);
-  return row;
-}
-
-function scoreBreakdownBlock(scoreBreakdown) {
-  if (!scoreBreakdown || typeof scoreBreakdown !== "object") return null;
-
-  const rows = SCORE_DIMENSIONS.map((dimension) => {
-    const item = scoreBreakdown[dimension.key];
-    if (!item) return null;
-    const maxScore = Number(item.maxScore ?? dimension.maxScore);
-    const score = Number(item.score ?? 0);
-    if (!Number.isFinite(maxScore) || maxScore <= 0) return null;
-
-    const row = document.createElement("div");
-    row.className = "score-breakdown-item";
-
-    const header = document.createElement("div");
-    header.className = "score-breakdown-header";
-
-    const label = document.createElement("span");
-    label.textContent = item.label || dimension.label;
-
-    const value = document.createElement("span");
-    value.textContent = `${Number.isFinite(score) ? score : 0}/${maxScore}`;
-
-    header.append(label, value);
-
-    const meter = document.createElement("div");
-    meter.className = "score-meter";
-    const fill = document.createElement("span");
-    fill.style.width = `${Math.max(0, Math.min(100, (score / maxScore) * 100))}%`;
-    meter.append(fill);
-
-    const reason = document.createElement("p");
-    reason.className = "score-reason";
-    reason.textContent = item.reason || "暂无得分说明";
-
-    row.append(header, meter, reason);
-    return row;
-  }).filter(Boolean);
-
-  if (!rows.length) return null;
-
-  const node = document.createElement("div");
-  node.className = "score-breakdown";
-  node.append(...rows);
-  return node;
-}
-
-function thresholdBlock(thresholdChecks) {
-  if (!thresholdChecks || typeof thresholdChecks !== "object") return null;
-  const checks = [thresholdChecks.age, thresholdChecks.education].filter(Boolean);
-  if (!checks.length) return null;
-
-  const node = document.createElement("div");
-  node.className = "threshold-grid";
-
-  for (const check of checks) {
-    const item = document.createElement("div");
-    item.className = `threshold-item ${check.status || "unknown"}`;
-
-    const label = document.createElement("span");
-    label.className = "threshold-label";
-    label.textContent = check.label || "门槛项";
-
-    const status = document.createElement("span");
-    status.className = "threshold-status";
-    status.textContent = thresholdStatusText(check.status);
-
-    const summary = document.createElement("p");
-    summary.textContent = [check.summary, check.reason, check.followUp].filter(Boolean).join("；") || "简历未明确体现";
-
-    item.append(label, status, summary);
-    node.append(item);
-  }
-
-  return node;
-}
-
-function thresholdStatusText(status) {
-  if (status === "satisfied") return "满足";
-  if (status === "unsatisfied") return "不满足";
-  return "未明确";
-}
-
-function rankingBlock(results) {
-  const sorted = [...results].sort((a, b) => Number(b.matchScore ?? -1) - Number(a.matchScore ?? -1));
-  const list = document.createElement("ol");
-  list.className = "ranking-list";
-
-  for (const item of sorted) {
-    const li = document.createElement("li");
-    const title = document.createElement("span");
-    title.className = "ranking-title";
-    title.textContent = item.profile?.title || "未命名岗位";
-
-    const meta = document.createElement("span");
-    meta.className = "ranking-meta";
-    meta.textContent = [
-      item.profile?.category || "未分类",
-      item.matchScore == null ? "-" : `${item.matchScore}`,
-      item.recommendation || item.error || "评估失败"
-    ].join(" · ");
-
-    li.append(title, meta);
-    list.append(li);
-  }
-
-  return list;
-}
-
-function listBlock(title, items) {
-  const normalized = Array.isArray(items) ? items : [];
-  const fragment = document.createDocumentFragment();
-
-  if (title) {
-    const heading = document.createElement("h4");
-    heading.textContent = title;
-    fragment.append(heading);
-  }
-
-  if (!normalized.length) {
-    fragment.append(paragraph("暂无", "empty"));
-    return fragment;
-  }
-
-  const list = document.createElement("ul");
-  list.className = "item-list";
-
-  for (const item of normalized) {
-    const li = document.createElement("li");
-    if (typeof item === "string") {
-      li.textContent = item;
-    } else {
-      li.append(renderObjectListItem(item));
-    }
-    list.append(li);
-  }
-
-  fragment.append(list);
-  return fragment;
-}
-
-function renderObjectListItem(item) {
-  const fragment = document.createDocumentFragment();
-  const title =
-    item.project ||
-    item.claim ||
-    item.requirement ||
-    item.risk ||
-    item.signal ||
-    item.title ||
-    item.name ||
-    "条目";
-
-  const titleNode = document.createElement("div");
-  titleNode.className = "item-title";
-  titleNode.textContent = String(title);
-  fragment.append(titleNode);
-
-  const detailParts = [
-    item.reason,
-    item.evidence,
-    item.summary,
-    item.description,
-    item.valueLevel ? `含金量：${item.valueLevel}` : ""
-  ].filter(Boolean);
-
-  if (detailParts.length) {
-    const detailNode = document.createElement("div");
-    detailNode.textContent = detailParts.join("；");
-    fragment.append(detailNode);
-  }
-
-  return fragment;
-}
-
-function objectBlock(title, value) {
-  const lines = [];
-  if (value?.summary) lines.push(value.summary);
-  if (value?.risk) lines.push(`风险：${value.risk}`);
-  if (value?.followUp) lines.push(`追问：${value.followUp}`);
-
-  return listBlock(title, lines.length ? lines : ["简历未明确体现"]);
-}
-
-function paragraph(text, className = "") {
-  const node = document.createElement("p");
-  node.className = className;
-  node.textContent = text;
-  return node;
+  markEntered(reportRoot);
 }
 
 function formatHistoryTime(value) {

@@ -48,6 +48,9 @@ const requiredFiles = [
   "extension/shared/jsonUtils.js",
   "extension/shared/candidateUtils.js",
   "extension/shared/pdfTextExtractor.js",
+  "extension/shared/reportRenderer.js",
+  "extension/shared/viewTransitions.js",
+  "extension/shared/ui.css",
   "extension/vendor/pdfjs/pdf.min.mjs",
   "extension/vendor/pdfjs/pdf.worker.min.mjs"
 ];
