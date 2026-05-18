@@ -3,13 +3,19 @@ import { buildCandidateAnalysisMessages, buildJobProfileMessages } from "./promp
 
 const DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
 
-export async function createJobProfileFromJD({ apiKey, model, jdText }) {
+export async function createJobProfileFromJD({ apiKey, model, jdText, internalRequirements = "" }) {
   const payload = await callDeepSeek({
     apiKey,
     model,
-    messages: buildJobProfileMessages(jdText)
+    messages: buildJobProfileMessages(jdText, internalRequirements)
   });
-  return normalizeJobProfile(parseJsonLike(payload), jdText);
+  return normalizeJobProfile(
+    {
+      ...parseJsonLike(payload),
+      internalRequirements
+    },
+    jdText
+  );
 }
 
 export async function analyzeCandidate({ apiKey, model, jobProfile, resumeText }) {

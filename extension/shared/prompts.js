@@ -1,4 +1,8 @@
-export function buildJobProfileMessages(jdText) {
+export function buildJobProfileMessages(jdText, internalRequirements = "") {
+  const internalBlock = internalRequirements
+    ? `\n内部定制需求（优先级高于 JD）：\n${internalRequirements}\n`
+    : "\n内部定制需求：无\n";
+
   return [
     {
       role: "system",
@@ -14,6 +18,7 @@ export function buildJobProfileMessages(jdText) {
   "title": "岗位名",
   "category": "研发/产品/市场/销售/职能",
   "jd": "原始JD全文",
+  "internalRequirements": "内部定制需求全文；没有则为空字符串",
   "mustHave": ["硬性要求"],
   "niceToHave": ["加分项"],
   "riskFlags": ["筛选时需要警惕的风险点"],
@@ -28,9 +33,11 @@ export function buildJobProfileMessages(jdText) {
 - riskFlags 要能辅助 HR 判断候选人是否在包装经历。
 - interviewFocus 要可用于面试追问。
 - 保留 jd 原文。
+- internalRequirements 必须保留内部定制需求原文；如果它与 JD 冲突，以内部定制需求为准。
 
 JD：
-${jdText}`
+${jdText}
+${internalBlock}`
     }
   ];
 }
@@ -60,6 +67,59 @@ ${resumeText}
     "roleName": "${jobProfile.title}",
     "matchScore": 0,
     "recommendation": "建议面试/谨慎面试/建议淘汰/需要人工复核"
+  },
+  "scoreBreakdown": {
+    "internalRequirements": {
+      "label": "内部定制需求",
+      "score": 0,
+      "maxScore": 30,
+      "reason": "结合内部定制需求说明得分原因",
+      "evidence": ["简历中的证据"]
+    },
+    "coreExperience": {
+      "label": "核心经历",
+      "score": 0,
+      "maxScore": 30,
+      "reason": "说明核心岗位经历的匹配程度",
+      "evidence": ["简历中的证据"]
+    },
+    "keySkills": {
+      "label": "关键技能",
+      "score": 0,
+      "maxScore": 15,
+      "reason": "说明关键技能命中情况",
+      "evidence": ["简历中的证据"]
+    },
+    "stability": {
+      "label": "稳定性",
+      "score": 0,
+      "maxScore": 10,
+      "reason": "说明履历稳定性、空窗或跳槽风险",
+      "evidence": ["简历中的证据"]
+    },
+    "businessUnderstanding": {
+      "label": "行业/业务理解",
+      "score": 0,
+      "maxScore": 15,
+      "reason": "说明行业、业务、场景理解的匹配程度",
+      "evidence": ["简历中的证据"]
+    }
+  },
+  "thresholdChecks": {
+    "age": {
+      "label": "年龄门槛",
+      "status": "satisfied/unsatisfied/unknown",
+      "summary": "是否满足年龄门槛；超过 35 岁默认不满足，内部定制需求另有说明时优先",
+      "reason": "判断依据",
+      "followUp": "信息不明确时的追问"
+    },
+    "education": {
+      "label": "学历门槛",
+      "status": "satisfied/unsatisfied/unknown",
+      "summary": "是否满足学历门槛",
+      "reason": "判断依据",
+      "followUp": "信息不明确时的追问"
+    }
   },
   "experienceAnalysis": {
     "oneLineProfile": "一句话说清楚候选人是干什么的",
@@ -107,6 +167,11 @@ ${resumeText}
 }
 
 判断标准：
+- 岗位知识库中的 internalRequirements 是高优先级要求；如果与 JD 冲突，以 internalRequirements 为准。
+- matchScore 必须等于 scoreBreakdown 五个维度得分之和，总分 100 分：内部定制需求 30、核心经历 30、关键技能 15、稳定性 10、行业/业务理解 15。
+- 年龄和学历是门槛项，不计入总分；年龄超过 35 岁默认标记为 unsatisfied，除非内部定制需求明确放宽。
+- 年龄或学历门槛不满足时，推荐至少降为“谨慎面试”；严重不满足岗位硬要求时可给“建议淘汰”。
+- 简历未体现年龄或学历时标记为 unknown，不要扣分，不要编造。
 - candidateName 只能从简历文本中明确出现的人名提取，不能使用“自定义添加”“打招呼”“沟通”等页面操作文案，也不能猜测。
 - 有含金量：角色清楚、负责边界清楚、有复杂问题、有业务结果或指标变化、有上线规模、有具体产品/技术/业务决策。
 - 疑似包装：只堆关键词、个人贡献模糊、只写参与/负责但无细节、项目名很大但职责很虚、热词多但没有指标/流程/落地结果。

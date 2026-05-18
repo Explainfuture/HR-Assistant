@@ -20,6 +20,7 @@ const settingsStatus = document.querySelector("#settingsStatus");
 const closeOptionsButton = document.querySelector("#closeOptionsButton");
 
 const jdInput = document.querySelector("#jdInput");
+const internalRequirementsInput = document.querySelector("#internalRequirementsInput");
 const generateProfileButton = document.querySelector("#generateProfileButton");
 const clearEditorButton = document.querySelector("#clearEditorButton");
 const generateStatus = document.querySelector("#generateStatus");
@@ -72,7 +73,8 @@ generateProfileButton.addEventListener("click", async () => {
     const profile = await createJobProfileFromJD({
       apiKey: settings.apiKey,
       model: settings.model,
-      jdText
+      jdText,
+      internalRequirements: internalRequirementsInput.value.trim()
     });
     jsonEditor.value = formatJson(profile);
     profileSelect.value = "";
@@ -83,6 +85,7 @@ generateProfileButton.addEventListener("click", async () => {
 
 clearEditorButton.addEventListener("click", () => {
   jdInput.value = "";
+  internalRequirementsInput.value = "";
   jsonEditor.value = "";
   profileSelect.value = "";
   categorySelect.value = "";
@@ -93,6 +96,8 @@ clearEditorButton.addEventListener("click", () => {
 profileSelect.addEventListener("change", () => {
   const selected = profiles.find((item) => item.id === profileSelect.value);
   jsonEditor.value = selected ? formatJson(normalizeJobProfile(selected)) : "";
+  jdInput.value = selected?.jd || "";
+  internalRequirementsInput.value = selected?.internalRequirements || "";
   categorySelect.value = selected?.category || "";
   setStatus(profileStatus, "");
 });
@@ -124,7 +129,13 @@ formatProfileButton.addEventListener("click", () => {
 saveProfileButton.addEventListener("click", async () => {
   await runWithStatus(profileStatus, async () => {
     const parsed = parseJsonLike(jsonEditor.value);
-    const profile = normalizeJobProfile(parsed, jdInput.value);
+    const profile = normalizeJobProfile(
+      {
+        ...parsed,
+        internalRequirements: internalRequirementsInput.value.trim()
+      },
+      jdInput.value
+    );
     if (!profile.title) throw new Error("岗位 title 不能为空");
 
     await saveJobProfile(profile);

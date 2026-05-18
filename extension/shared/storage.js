@@ -79,6 +79,16 @@ export async function clearAnalysisHistory() {
   return [];
 }
 
+export async function deleteAnalysisHistoryEntry(id) {
+  const targetId = compactText(id);
+  if (!targetId) return listAnalysisHistory();
+
+  const history = await listAnalysisHistory();
+  const nextHistory = history.filter((entry) => entry.id !== targetId);
+  await chrome.storage.local.set({ [ANALYSIS_HISTORY_KEY]: nextHistory });
+  return nextHistory;
+}
+
 export async function updateAnalysisHistoryEntry(id, patch) {
   const history = await listAnalysisHistory();
   const nextHistory = history.map((entry) =>

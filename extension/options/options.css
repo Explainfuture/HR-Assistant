@@ -14,7 +14,7 @@
 body {
   margin: 0;
   background:
-    linear-gradient(180deg, #ffffff 0, #f8fafc 280px),
+    linear-gradient(180deg, #ffffff 0, #eef6f6 260px, #f8fafc 560px),
     #f8fafc;
   -webkit-tap-highlight-color: rgba(15, 23, 42, 0.08);
   overflow-x: hidden;
@@ -50,7 +50,7 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .header-actions {
@@ -100,9 +100,9 @@ p {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 22px;
+  padding: 24px;
   margin-bottom: 20px;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
 }
 
 .two-column {
@@ -114,10 +114,14 @@ p {
 
 .section-title {
   margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e5edf3;
 }
 
 .composer,
 .editor {
+  display: grid;
+  gap: 14px;
   min-width: 0;
 }
 
@@ -165,11 +169,13 @@ textarea {
   resize: vertical;
   line-height: 1.55;
   overflow-wrap: anywhere;
+  min-height: 120px;
 }
 
 .json-editor {
   font-family: "Cascadia Code", Consolas, "SFMono-Regular", monospace;
   font-size: 13px;
+  min-height: 460px;
 }
 
 .actions {

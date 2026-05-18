@@ -26,6 +26,14 @@ export function formatJson(value) {
 
 export const JOB_CATEGORIES = ["研发", "产品", "市场", "销售", "职能"];
 
+export const SCORE_DIMENSIONS = [
+  { key: "internalRequirements", label: "内部定制需求", maxScore: 30 },
+  { key: "coreExperience", label: "核心经历", maxScore: 30 },
+  { key: "keySkills", label: "关键技能", maxScore: 15 },
+  { key: "stability", label: "稳定性", maxScore: 10 },
+  { key: "businessUnderstanding", label: "行业/业务理解", maxScore: 15 }
+];
+
 const CATEGORY_KEYWORDS = {
   研发: [
     "研发",
@@ -82,6 +90,7 @@ export function normalizeJobProfile(profile, fallbackJd = "") {
     title,
     category: normalizeJobCategory(profile.category, title, jd),
     jd,
+    internalRequirements: compactText(profile.internalRequirements || ""),
     mustHave: ensureArray(profile.mustHave),
     niceToHave: ensureArray(profile.niceToHave),
     riskFlags: ensureArray(profile.riskFlags),
@@ -91,14 +100,22 @@ export function normalizeJobProfile(profile, fallbackJd = "") {
 }
 
 export function normalizeAnalysis(analysis, selectedProfile) {
+  const scoreBreakdown = normalizeScoreBreakdown(analysis?.scoreBreakdown);
+  const scoreTotal = scoreBreakdown
+    ? Object.values(scoreBreakdown).reduce((sum, item) => sum + item.score, 0)
+    : 0;
+  const rawScore = Number(analysis?.matchedRole?.matchScore);
+
   return {
     candidateName: compactText(analysis?.candidateName || ""),
     matchedRole: {
       roleId: analysis?.matchedRole?.roleId || selectedProfile.id,
       roleName: analysis?.matchedRole?.roleName || selectedProfile.title,
-      matchScore: Number(analysis?.matchedRole?.matchScore ?? 0),
+      matchScore: scoreBreakdown ? scoreTotal : Number.isFinite(rawScore) ? rawScore : 0,
       recommendation: analysis?.matchedRole?.recommendation || "需要人工复核"
     },
+    scoreBreakdown,
+    thresholdChecks: normalizeThresholdChecks(analysis?.thresholdChecks),
     experienceAnalysis: {
       oneLineProfile: analysis?.experienceAnalysis?.oneLineProfile || "",
       matchedProjects: ensureArray(analysis?.experienceAnalysis?.matchedProjects),
@@ -118,6 +135,56 @@ export function normalizeAnalysis(analysis, selectedProfile) {
     interviewQuestions: ensureArray(analysis?.interviewQuestions),
     copyableConclusion: analysis?.copyableConclusion || ""
   };
+}
+
+function normalizeScoreBreakdown(value) {
+  if (!value || typeof value !== "object") return null;
+  const source = value && typeof value === "object" ? value : {};
+  return Object.fromEntries(
+    SCORE_DIMENSIONS.map((dimension) => {
+      const item = source[dimension.key] || {};
+      const score = clampScore(Number(item.score ?? 0), dimension.maxScore);
+      const maxScore = Number(item.maxScore ?? dimension.maxScore);
+      return [
+        dimension.key,
+        {
+          label: compactText(item.label || dimension.label),
+          score,
+          maxScore: Number.isFinite(maxScore) && maxScore > 0 ? maxScore : dimension.maxScore,
+          reason: compactText(item.reason || ""),
+          evidence: ensureArray(item.evidence)
+        }
+      ];
+    })
+  );
+}
+
+function normalizeThresholdChecks(value) {
+  if (!value || typeof value !== "object") return null;
+  const source = value && typeof value === "object" ? value : {};
+  return {
+    age: normalizeThresholdCheck(source.age, "年龄门槛"),
+    education: normalizeThresholdCheck(source.education, "学历门槛")
+  };
+}
+
+function normalizeThresholdCheck(value, label) {
+  const source = value && typeof value === "object" ? value : {};
+  const status = ["satisfied", "unsatisfied", "unknown"].includes(source.status)
+    ? source.status
+    : "unknown";
+  return {
+    label: compactText(source.label || label),
+    status,
+    summary: compactText(source.summary || ""),
+    reason: compactText(source.reason || ""),
+    followUp: compactText(source.followUp || "")
+  };
+}
+
+function clampScore(value, maxScore) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(Math.round(value), maxScore));
 }
 
 export function createId() {

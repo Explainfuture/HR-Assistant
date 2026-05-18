@@ -9,6 +9,10 @@ import {
   normalizeJobCategory,
   parseJsonLike
 } from "../extension/shared/jsonUtils.js";
+import {
+  inferCandidateName,
+  isCandidateNameRecognized
+} from "../extension/shared/candidateUtils.js";
 
 const root = process.cwd();
 const manifestPath = join(root, "extension", "manifest.json");
@@ -65,6 +69,29 @@ assert.equal(normalizeJobCategory("销售", "Java 工程师", ""), "销售");
 assert.deepEqual(ensureArray([{ project: "Agent eval", reason: "Strong evidence\\nwith detail" }]), [
   { project: "Agent eval", reason: "Strong evidence with detail" }
 ]);
+assert.equal(
+  inferCandidateName(
+    "ccassiduous 22岁 | 27年应届生 | 本科\\n985后端开发java\\n工作/实习经历\\n九坤投资\\n前端开发工程师"
+  ),
+  "ccassiduous"
+);
+assert.equal(
+  inferCandidateName(
+    "John Smith\\nSenior Frontend Engineer\\njohn.smith@example.com\\nWork Experience\\nAcme Technology Inc"
+  ),
+  "John Smith"
+);
+assert.equal(
+  inferCandidateName(
+    "Name: Mary Ann Lee\\nProduct Manager\\nEducation\\nUniversity of California"
+  ),
+  "Mary Ann Lee"
+);
+assert.equal(isCandidateNameRecognized("ccassiduous"), true);
+assert.equal(isCandidateNameRecognized("John Smith"), true);
+assert.equal(isCandidateNameRecognized("九坤投资"), false);
+assert.equal(isCandidateNameRecognized("Senior Frontend Engineer"), false);
+assert.equal(isCandidateNameRecognized("Acme Technology Inc"), false);
 
 const javascriptFiles = requiredFiles.filter((file) => /\.(mjs|js)$/.test(file));
 for (const file of javascriptFiles) {

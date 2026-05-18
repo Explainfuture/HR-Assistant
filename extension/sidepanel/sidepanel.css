@@ -13,7 +13,9 @@
 
 body {
   margin: 0;
-  background: #f6f7f9;
+  background:
+    linear-gradient(180deg, #ffffff 0, #f6f7f9 180px),
+    #f6f7f9;
   -webkit-tap-highlight-color: rgba(16, 24, 40, 0.08);
   overscroll-behavior: contain;
   overflow-x: hidden;
@@ -176,9 +178,9 @@ label {
 .source-group {
   display: grid;
   gap: 10px;
-  border: 1px solid #eaecf0;
+  border: 1px solid #d9e2ec;
   border-radius: 8px;
-  background: #fcfcfd;
+  background: #fbfcfe;
   padding: 14px;
 }
 
@@ -369,6 +371,7 @@ input[type="file"]:hover {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 14px;
 }
 
 .score {
@@ -386,6 +389,104 @@ input[type="file"]:hover {
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.score-breakdown {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #fcfcfd;
+  padding: 13px;
+  margin-bottom: 12px;
+}
+
+.score-breakdown-item {
+  display: grid;
+  gap: 6px;
+}
+
+.score-breakdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #101828;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-meter {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e4e7ec;
+}
+
+.score-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #12b76a, #1570ef);
+}
+
+.score-reason {
+  margin-top: 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.threshold-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
+
+.threshold-item {
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.threshold-label,
+.threshold-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.threshold-label {
+  color: #344054;
+  margin-right: 6px;
+}
+
+.threshold-status {
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.threshold-item.satisfied .threshold-status {
+  background: #ecfdf3;
+  color: #087443;
+}
+
+.threshold-item.unsatisfied .threshold-status {
+  background: #fff1f3;
+  color: #b42318;
+}
+
+.threshold-item p {
+  margin-top: 7px;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .item-list {
@@ -466,6 +567,10 @@ input[type="file"]:hover {
   }
 
   .history-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .threshold-grid {
     grid-template-columns: 1fr;
   }
 }

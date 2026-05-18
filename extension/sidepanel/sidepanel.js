@@ -1,6 +1,6 @@
 import { extractTextFromPdfFile } from "../shared/pdfTextExtractor.js";
 import { inferCandidateName } from "../shared/candidateUtils.js";
-import { JOB_CATEGORIES } from "../shared/jsonUtils.js";
+import { JOB_CATEGORIES, SCORE_DIMENSIONS } from "../shared/jsonUtils.js";
 import {
   getSettings,
   listAnalysisHistory,
@@ -373,6 +373,8 @@ function renderReport(analysis, batchResults = []) {
   reportRoot.append(
     section("匹配岗位", [
       scoreRow(role.matchScore, role.recommendation),
+      scoreBreakdownBlock(analysis?.scoreBreakdown),
+      thresholdBlock(analysis?.thresholdChecks),
       textBlock(role.roleName || "未命名岗位")
     ])
   );
@@ -476,6 +478,88 @@ function scoreRow(score, recommendation) {
 
   row.append(scoreNode, recommendationNode);
   return row;
+}
+
+function scoreBreakdownBlock(scoreBreakdown) {
+  if (!scoreBreakdown || typeof scoreBreakdown !== "object") return null;
+
+  const rows = SCORE_DIMENSIONS.map((dimension) => {
+    const item = scoreBreakdown[dimension.key];
+    if (!item) return null;
+    const maxScore = Number(item.maxScore ?? dimension.maxScore);
+    const score = Number(item.score ?? 0);
+    if (!Number.isFinite(maxScore) || maxScore <= 0) return null;
+
+    const row = document.createElement("div");
+    row.className = "score-breakdown-item";
+
+    const header = document.createElement("div");
+    header.className = "score-breakdown-header";
+
+    const label = document.createElement("span");
+    label.textContent = item.label || dimension.label;
+
+    const value = document.createElement("span");
+    value.textContent = `${Number.isFinite(score) ? score : 0}/${maxScore}`;
+
+    header.append(label, value);
+
+    const meter = document.createElement("div");
+    meter.className = "score-meter";
+    const fill = document.createElement("span");
+    fill.style.width = `${Math.max(0, Math.min(100, (score / maxScore) * 100))}%`;
+    meter.append(fill);
+
+    const reason = document.createElement("p");
+    reason.className = "score-reason";
+    reason.textContent = item.reason || "暂无得分说明";
+
+    row.append(header, meter, reason);
+    return row;
+  }).filter(Boolean);
+
+  if (!rows.length) return null;
+
+  const node = document.createElement("div");
+  node.className = "score-breakdown";
+  node.append(...rows);
+  return node;
+}
+
+function thresholdBlock(thresholdChecks) {
+  if (!thresholdChecks || typeof thresholdChecks !== "object") return null;
+  const checks = [thresholdChecks.age, thresholdChecks.education].filter(Boolean);
+  if (!checks.length) return null;
+
+  const node = document.createElement("div");
+  node.className = "threshold-grid";
+
+  for (const check of checks) {
+    const item = document.createElement("div");
+    item.className = `threshold-item ${check.status || "unknown"}`;
+
+    const label = document.createElement("span");
+    label.className = "threshold-label";
+    label.textContent = check.label || "门槛项";
+
+    const status = document.createElement("span");
+    status.className = "threshold-status";
+    status.textContent = thresholdStatusText(check.status);
+
+    const summary = document.createElement("p");
+    summary.textContent = [check.summary, check.reason, check.followUp].filter(Boolean).join("；") || "简历未明确体现";
+
+    item.append(label, status, summary);
+    node.append(item);
+  }
+
+  return node;
+}
+
+function thresholdStatusText(status) {
+  if (status === "satisfied") return "满足";
+  if (status === "unsatisfied") return "不满足";
+  return "未明确";
 }
 
 function textBlock(text) {
