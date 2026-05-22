@@ -53,6 +53,7 @@ assert.equal(pdfTextExtractorSource.includes("renderPageToImageUrl"), true, "PDF
 assert.equal(pdfTextExtractorSource.includes("imageUrls"), true, "PDF extractor should return rendered page images");
 assert.equal(pdfTextExtractorSource.includes("shouldRenderPdfPageImages"), true, "PDF image rendering should be conditional");
 assert.equal(pdfTextExtractorSource.includes("cMapUrl"), true, "PDF extractor should configure CMap assets");
+assert.equal(pdfTextExtractorSource.includes("PDFJS_VERBOSITY_ERRORS"), true, "PDF extractor should suppress non-fatal PDF.js warnings");
 assert.equal(existsSync(join(root, "extension/vendor/pdfjs/cmaps/UniGB-UCS2-H.bcmap")), true, "PDF CMap assets should be bundled");
 assert.equal(existsSync(join(root, "extension/vendor/pdfjs/standard_fonts/LiberationSans-Regular.ttf")), true, "PDF standard fonts should be bundled");
 const historySource = readFileSync(join(root, "extension/history/history.js"), "utf8");

@@ -10,6 +10,7 @@ const STANDARD_FONT_DATA_URL = chrome.runtime.getURL("vendor/pdfjs/standard_font
 const MAX_RENDERED_PAGES = 8;
 const MAX_IMAGE_EDGE = 1800;
 const IMAGE_QUALITY = 0.86;
+const PDFJS_VERBOSITY_ERRORS = 0;
 
 export async function extractTextFromPdfFile(file) {
   if (!file) {
@@ -26,7 +27,8 @@ export async function extractTextFromPdfFile(file) {
     cMapPacked: true,
     standardFontDataUrl: STANDARD_FONT_DATA_URL,
     isEvalSupported: false,
-    useWorkerFetch: false
+    useWorkerFetch: false,
+    verbosity: PDFJS_VERBOSITY_ERRORS
   });
   const pdf = await task.promise;
   const pages = [];
