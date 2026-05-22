@@ -147,6 +147,12 @@ assert.deepEqual(parseJsonLike('模型输出：{"ok":true,"items":[1,2]}'), {
   ok: true,
   items: [1, 2]
 });
+assert.deepEqual(parseJsonLike(`模型输出：{"title":"AI Agent
+评测","mustHave":["Claude
+Cursor	Codex"]}`), {
+  title: "AI Agent\n评测",
+  mustHave: ["Claude\nCursor\tCodex"]
+});
 assert.equal(formatJson({ ok: true }), '{\n  "ok": true\n}');
 assert.equal(compactText("a\\nb\nc\t d"), "a b c d");
 assert.equal(normalizeJobCategory("", "品牌投放经理", ""), "市场");

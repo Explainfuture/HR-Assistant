@@ -16,7 +16,7 @@ export function parseJsonLike(input) {
     if (!extracted) {
       throw new Error("未找到有效 JSON 对象");
     }
-    return JSON.parse(extracted);
+    return parseJsonWithControlCharRepair(extracted);
   }
 }
 
@@ -363,4 +363,64 @@ function extractFirstJsonObject(text) {
   }
 
   return "";
+}
+
+function parseJsonWithControlCharRepair(text) {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    if (!/control character/i.test(error?.message || "")) throw error;
+    return JSON.parse(escapeControlCharsInJsonStrings(text));
+  }
+}
+
+function escapeControlCharsInJsonStrings(text) {
+  let output = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const code = char.charCodeAt(0);
+
+    if (!inString) {
+      output += char;
+      if (char === '"') inString = true;
+      continue;
+    }
+
+    if (escaped) {
+      output += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      output += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      output += char;
+      inString = false;
+      continue;
+    }
+
+    if (code <= 0x1f) {
+      output += escapeJsonControlChar(char, code);
+      continue;
+    }
+
+    output += char;
+  }
+
+  return output;
+}
+
+function escapeJsonControlChar(char, code) {
+  if (char === "\n") return "\\n";
+  if (char === "\r") return "\\r";
+  if (char === "\t") return "\\t";
+  return `\\u${code.toString(16).padStart(4, "0")}`;
 }
