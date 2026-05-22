@@ -13,6 +13,7 @@ import {
   inferCandidateName,
   isCandidateNameRecognized
 } from "../extension/shared/candidateUtils.js";
+import { extractDoubaoResponseText } from "../extension/shared/deepseekClient.js";
 
 const root = process.cwd();
 const manifestPath = join(root, "extension", "manifest.json");
@@ -95,6 +96,29 @@ assert.equal(isCandidateNameRecognized("John Smith"), true);
 assert.equal(isCandidateNameRecognized("九坤投资"), false);
 assert.equal(isCandidateNameRecognized("Senior Frontend Engineer"), false);
 assert.equal(isCandidateNameRecognized("Acme Technology Inc"), false);
+
+assert.equal(
+  extractDoubaoResponseText({
+    output: [
+      {
+        type: "reasoning",
+        summary: [{ text: "reasoning summary" }]
+      },
+      {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: '{"title":"数据标注师"}' }]
+      }
+    ]
+  }),
+  '{"title":"数据标注师"}'
+);
+assert.equal(
+  extractDoubaoResponseText({
+    choices: [{ message: { content: '{"title":"兼容式响应"}' } }]
+  }),
+  '{"title":"兼容式响应"}'
+);
 
 const javascriptFiles = requiredFiles.filter((file) => /\.(mjs|js)$/.test(file));
 for (const file of javascriptFiles) {

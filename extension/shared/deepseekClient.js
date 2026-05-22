@@ -97,10 +97,73 @@ async function callDoubaoResponses({ apiKey, model, prompt, imageUrls = [] }) {
   }
 
   const data = await response.json();
-  const outputText = data?.output_text;
-  if (outputText) return outputText;
-
-  const content = data?.output?.[0]?.content?.find((item) => item?.type === "output_text")?.text;
-  if (!content) throw new Error("Doubao 返回为空");
+  const content = extractDoubaoResponseText(data);
+  if (!content) {
+    const reason = data?.incomplete_details?.reason || data?.error?.message || "";
+    throw new Error(reason ? `Doubao 返回为空：${reason}` : "Doubao 返回为空");
+  }
   return content;
+}
+
+export function extractDoubaoResponseText(data) {
+  const directOutputText = getNonEmptyText(data?.output_text);
+  if (directOutputText) return directOutputText;
+
+  const choiceText = extractChoiceText(data?.choices);
+  if (choiceText) return choiceText;
+
+  for (const outputItem of Array.isArray(data?.output) ? data.output : []) {
+    const text = extractContentText(outputItem);
+    if (text) return text;
+  }
+
+  return "";
+}
+
+function extractChoiceText(choices) {
+  for (const choice of Array.isArray(choices) ? choices : []) {
+    const messageContent = choice?.message?.content;
+    if (typeof messageContent === "string") {
+      const text = getNonEmptyText(messageContent);
+      if (text) return text;
+    }
+
+    const text = extractContentText(messageContent);
+    if (text) return text;
+  }
+
+  return "";
+}
+
+function extractContentText(value) {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    return getNonEmptyText(value);
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const text = extractContentText(item);
+      if (text) return text;
+    }
+    return "";
+  }
+
+  if (typeof value !== "object") return "";
+
+  if (["output_text", "text"].includes(value.type)) {
+    const typedText = getNonEmptyText(value.text);
+    if (typedText) return typedText;
+  }
+
+  const contentText = extractContentText(value.content);
+  if (contentText) return contentText;
+
+  return "";
+}
+
+function getNonEmptyText(value) {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text || "";
 }
