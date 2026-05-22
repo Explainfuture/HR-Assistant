@@ -38,7 +38,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 async function submitTask(payload) {
   const resumeText = String(payload?.resume?.text || "").trim();
-  if (resumeText.length < 80) {
+  const resumeImageUrls = Array.isArray(payload?.resume?.imageUrls)
+    ? payload.resume.imageUrls.filter(Boolean).slice(0, 8)
+    : [];
+  if (resumeText.length < 80 && !resumeImageUrls.length) {
     throw new Error("简历文本过短，无法提交后台分析");
   }
 
@@ -56,6 +59,7 @@ async function submitTask(payload) {
     source: payload?.resume?.source || "未知来源",
     resume: {
       text: resumeText,
+      imageUrls: resumeImageUrls,
       summary: payload?.resume?.summary || "",
       preview: resumeText.slice(0, 180)
     },

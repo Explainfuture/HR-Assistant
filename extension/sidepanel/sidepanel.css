@@ -1,21 +1,23 @@
 body {
   background:
-    linear-gradient(180deg, #ffffff 0, #f6f7f9 180px),
-    #f6f7f9;
+    linear-gradient(180deg, #ffffff 0, #f4f6f8 160px),
+    var(--bg);
   overscroll-behavior: contain;
 }
 
 .panel {
   min-width: 340px;
-  padding: 20px 18px 32px;
+  padding: 18px 16px 28px;
 }
 
 .panel-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  margin-bottom: 18px;
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.panel-header > div:first-child {
+  min-width: 0;
 }
 
 .panel-header h1 {
@@ -23,28 +25,27 @@ body {
 }
 
 .header-actions {
-  flex-shrink: 0;
+  justify-content: flex-start;
+  min-width: 0;
 }
 
 .control-block,
 .capture-block,
 .task-block {
-  padding: var(--space-4);
-  margin-bottom: 14px;
+  padding: 14px;
+  margin-bottom: 12px;
 }
 
 .control-block {
   display: grid;
-  gap: 14px;
+  gap: 13px;
 }
 
 .source-group {
   display: grid;
-  gap: 10px;
-  border: 1px solid #d9e2ec;
-  border-radius: var(--radius);
-  background: var(--bg-soft);
-  padding: 14px;
+  gap: 9px;
+  border-top: 1px solid var(--border);
+  padding-top: 13px;
 }
 
 .source-title {
@@ -76,8 +77,8 @@ body {
 .divider {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  margin: var(--space-1) 0;
+  gap: 10px;
+  margin: 0;
   color: var(--muted);
   font-size: 12px;
 }
@@ -87,7 +88,7 @@ body {
   content: "";
   flex: 1;
   height: 1px;
-  background: #eaecf0;
+  background: var(--border);
 }
 
 .task-list,
@@ -99,21 +100,21 @@ body {
 .task-item,
 .history-item {
   width: 100%;
-  border: 1px solid #eaecf0;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-subtle);
-  padding: var(--space-3);
+  padding: 11px;
   text-align: left;
 }
 
 .task-item.running {
-  border-color: #b2ddff;
-  background: #f5faff;
+  border-color: #bfdbfe;
+  background: var(--primary-soft);
 }
 
 .task-item.done {
-  border-color: #abefc6;
-  background: #f6fef9;
+  border-color: #a7f3d0;
+  background: var(--success-soft);
 }
 
 .task-item.error {
@@ -125,7 +126,7 @@ body {
 .history-title {
   display: flex;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: 10px;
   min-width: 0;
   color: var(--text);
   font-weight: 800;
@@ -159,6 +160,6 @@ body {
 @media (max-width: 380px) {
   .panel {
     min-width: 320px;
-    padding: 16px 14px 28px;
+    padding: 16px 14px 26px;
   }
 }

@@ -2,11 +2,15 @@
   "manifest_version": 3,
   "name": "Resume Copilot",
   "version": "0.1.0",
-  "description": "Analyze BOSS candidate resumes against locally maintained JD profiles.",
+  "description": "Analyze BOSS and Moka candidate resumes against locally maintained JD profiles.",
   "permissions": ["storage", "sidePanel", "activeTab", "tabs"],
   "host_permissions": [
     "https://www.zhipin.com/*",
     "https://*.zhipin.com/*",
+    "https://mokahr.com/*",
+    "https://app.mokahr.com/*",
+    "https://*.mokahr.com/*",
+    "https://*.mokahr.com.cn/*",
     "https://ark.cn-beijing.volces.com/*"
   ],
   "background": {
@@ -22,7 +26,14 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.zhipin.com/*", "https://*.zhipin.com/*"],
+      "matches": [
+        "https://www.zhipin.com/*",
+        "https://*.zhipin.com/*",
+        "https://mokahr.com/*",
+        "https://app.mokahr.com/*",
+        "https://*.mokahr.com/*",
+        "https://*.mokahr.com.cn/*"
+      ],
       "js": ["content/bossResumeExtractor.js"],
       "run_at": "document_idle"
     }

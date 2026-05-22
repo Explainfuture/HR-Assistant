@@ -105,35 +105,41 @@ export function normalizeAnalysis(analysis, selectedProfile) {
     ? Object.values(scoreBreakdown).reduce((sum, item) => sum + item.score, 0)
     : 0;
   const rawScore = Number(analysis?.matchedRole?.matchScore);
+  const matchScore = scoreBreakdown ? scoreTotal : Number.isFinite(rawScore) ? rawScore : 0;
+  const recommendation = analysis?.matchedRole?.recommendation || inferRecommendation(matchScore);
+  const experienceAnalysis = normalizeExperienceAnalysis(analysis?.experienceAnalysis, scoreBreakdown, selectedProfile);
+  const elimination = normalizeElimination(analysis?.elimination, scoreBreakdown, matchScore, recommendation);
+  const interviewQuestions = ensureArray(analysis?.interviewQuestions);
+  const copyableConclusion =
+    compactText(analysis?.copyableConclusion) ||
+    buildCopyableConclusion({
+      candidateName: analysis?.candidateName,
+      profile: selectedProfile,
+      matchScore,
+      recommendation,
+      scoreBreakdown,
+      elimination
+    });
 
   return {
     candidateName: compactText(analysis?.candidateName || ""),
     matchedRole: {
       roleId: analysis?.matchedRole?.roleId || selectedProfile.id,
       roleName: analysis?.matchedRole?.roleName || selectedProfile.title,
-      matchScore: scoreBreakdown ? scoreTotal : Number.isFinite(rawScore) ? rawScore : 0,
-      recommendation: analysis?.matchedRole?.recommendation || "需要人工复核"
+      matchScore,
+      recommendation
     },
     scoreBreakdown,
     thresholdChecks: normalizeThresholdChecks(analysis?.thresholdChecks),
-    experienceAnalysis: {
-      oneLineProfile: analysis?.experienceAnalysis?.oneLineProfile || "",
-      matchedProjects: ensureArray(analysis?.experienceAnalysis?.matchedProjects),
-      mismatchedProjects: ensureArray(analysis?.experienceAnalysis?.mismatchedProjects),
-      overclaimRisks: ensureArray(analysis?.experienceAnalysis?.overclaimRisks),
-      highValueSignals: ensureArray(analysis?.experienceAnalysis?.highValueSignals)
-    },
+    experienceAnalysis,
     objectiveAnalysis: {
       education: analysis?.objectiveAnalysis?.education || {},
       ageAndExperience: analysis?.objectiveAnalysis?.ageAndExperience || {},
       employmentStatus: analysis?.objectiveAnalysis?.employmentStatus || {}
     },
-    elimination: {
-      shouldReject: Boolean(analysis?.elimination?.shouldReject),
-      reasons: ensureArray(analysis?.elimination?.reasons)
-    },
-    interviewQuestions: ensureArray(analysis?.interviewQuestions),
-    copyableConclusion: analysis?.copyableConclusion || ""
+    elimination,
+    interviewQuestions: interviewQuestions.length ? interviewQuestions : buildInterviewQuestions(scoreBreakdown, selectedProfile),
+    copyableConclusion
   };
 }
 
@@ -157,6 +163,93 @@ function normalizeScoreBreakdown(value) {
       ];
     })
   );
+}
+
+function normalizeExperienceAnalysis(value, scoreBreakdown, selectedProfile) {
+  const source = value && typeof value === "object" ? value : {};
+  const matchedProjects = ensureArray(source.matchedProjects);
+  const mismatchedProjects = ensureArray(source.mismatchedProjects);
+  const overclaimRisks = ensureArray(source.overclaimRisks);
+  const highValueSignals = ensureArray(source.highValueSignals);
+  const weakDimensions = getScoreItems(scoreBreakdown).filter((item) => item.score <= Math.max(1, item.maxScore * 0.35));
+  const strongDimensions = getScoreItems(scoreBreakdown).filter((item) => item.score >= item.maxScore * 0.7);
+
+  return {
+    oneLineProfile:
+      compactText(source.oneLineProfile) ||
+      buildOneLineProfile(scoreBreakdown, selectedProfile),
+    matchedProjects: matchedProjects.length
+      ? matchedProjects
+      : strongDimensions.map((item) => ({ project: item.label, reason: item.reason, valueLevel: "medium" })),
+    mismatchedProjects: mismatchedProjects.length
+      ? mismatchedProjects
+      : weakDimensions.map((item) => ({ project: item.label, reason: item.reason })),
+    overclaimRisks,
+    highValueSignals
+  };
+}
+
+function normalizeElimination(value, scoreBreakdown, matchScore, recommendation) {
+  const source = value && typeof value === "object" ? value : {};
+  const reasons = ensureArray(source.reasons);
+  const shouldReject = Boolean(source.shouldReject) || /淘汰|不推荐|拒绝/i.test(String(recommendation || "")) || matchScore < 40;
+  return {
+    shouldReject,
+    reasons: reasons.length ? reasons : shouldReject ? buildEliminationReasons(scoreBreakdown) : []
+  };
+}
+
+function getScoreItems(scoreBreakdown) {
+  if (!scoreBreakdown || typeof scoreBreakdown !== "object") return [];
+  return SCORE_DIMENSIONS.map((dimension) => {
+    const item = scoreBreakdown[dimension.key] || {};
+    return {
+      key: dimension.key,
+      label: compactText(item.label || dimension.label),
+      score: Number(item.score ?? 0),
+      maxScore: Number(item.maxScore ?? dimension.maxScore),
+      reason: compactText(item.reason || "")
+    };
+  });
+}
+
+function buildOneLineProfile(scoreBreakdown, selectedProfile) {
+  const weak = getScoreItems(scoreBreakdown)
+    .filter((item) => item.reason)
+    .sort((a, b) => a.score / a.maxScore - b.score / b.maxScore)[0];
+  if (weak) return `候选人与${selectedProfile.title || "当前岗位"}匹配度偏低，主要问题是${weak.reason}`;
+  return `候选人与${selectedProfile.title || "当前岗位"}的匹配信息不足，需要人工复核。`;
+}
+
+function buildEliminationReasons(scoreBreakdown) {
+  return getScoreItems(scoreBreakdown)
+    .filter((item) => item.reason && item.score <= Math.max(1, item.maxScore * 0.35))
+    .slice(0, 3)
+    .map((item) => `${item.label}：${item.reason}`);
+}
+
+function buildInterviewQuestions(scoreBreakdown, selectedProfile) {
+  const questions = getScoreItems(scoreBreakdown)
+    .filter((item) => item.score < item.maxScore && item.reason)
+    .slice(0, 3)
+    .map((item) => `请候选人补充说明${item.label}相关经历：${item.reason}`);
+  return questions.length ? questions : [`请围绕${selectedProfile.title || "当前岗位"}确认候选人的实际项目经验和可投入时间。`];
+}
+
+function buildCopyableConclusion({ candidateName, profile, matchScore, recommendation, scoreBreakdown, elimination }) {
+  const reasons = elimination.reasons.length
+    ? elimination.reasons
+    : getScoreItems(scoreBreakdown).filter((item) => item.reason).slice(0, 2).map((item) => item.reason);
+  return compactText(
+    `${compactText(candidateName) || "候选人"}匹配${profile.title || "当前岗位"}得分${matchScore}，结论：${recommendation}。${reasons.slice(0, 2).join("；")}`
+  );
+}
+
+function inferRecommendation(score) {
+  if (score >= 80) return "建议面试";
+  if (score >= 60) return "谨慎面试";
+  if (score >= 40) return "需要人工复核";
+  return "建议淘汰";
 }
 
 function normalizeThresholdChecks(value) {

@@ -1,5 +1,6 @@
 import {
   clearAnalysisHistory,
+  deleteAnalysisHistoryEntries,
   deleteAnalysisHistoryEntry,
   listAnalysisHistory,
   updateAnalysisHistoryEntry
@@ -22,6 +23,8 @@ const copyConclusionButton = document.querySelector("#copyConclusionButton");
 
 let historyEntries = [];
 let selectedEntry = null;
+let isDeleteSelectionMode = false;
+let selectedDeleteIds = new Set();
 
 init();
 
@@ -38,6 +41,7 @@ clearHistoryButton.addEventListener("click", async () => {
 
   historyEntries = await clearAnalysisHistory();
   selectedEntry = null;
+  exitDeleteSelectionMode();
   render();
 });
 
@@ -67,15 +71,25 @@ renameCandidateButton.addEventListener("click", async () => {
 });
 
 deleteCandidateButton.addEventListener("click", async () => {
-  if (!selectedEntry) return;
+  if (!isDeleteSelectionMode) {
+    enterDeleteSelectionMode();
+    render();
+    return;
+  }
 
-  const label = selectedEntry.candidateName || selectedEntry.profile?.title || "该候选人";
-  if (!confirm(`确定删除“${label}”的解析历史？此操作无法撤销。`)) return;
+  if (!selectedDeleteIds.size) {
+    exitDeleteSelectionMode();
+    render();
+    return;
+  }
 
-  const deletedId = selectedEntry.id;
-  const deletedIndex = historyEntries.findIndex((entry) => entry.id === deletedId);
-  historyEntries = await deleteAnalysisHistoryEntry(deletedId);
-  selectedEntry = historyEntries[deletedIndex] || historyEntries[deletedIndex - 1] || historyEntries[0] || null;
+  const count = selectedDeleteIds.size;
+  if (!confirm(`???????? ${count} ??????????????`)) return;
+
+  const previousSelectedId = selectedEntry?.id || "";
+  historyEntries = await deleteAnalysisHistoryEntries([...selectedDeleteIds]);
+  selectedEntry = historyEntries.find((entry) => entry.id === previousSelectedId) || historyEntries[0] || null;
+  exitDeleteSelectionMode();
   render();
 });
 
@@ -91,6 +105,7 @@ function render() {
     ? `本地保留最近 ${historyEntries.length} 位候选人的解析结果。`
     : "暂无本地候选人解析历史。";
   clearHistoryButton.disabled = !historyEntries.length;
+  updateDeleteActions();
   renderHistoryList();
   renderSelectedEntry();
 }
@@ -110,8 +125,17 @@ function renderHistoryList() {
     const button = document.createElement("button");
     button.className = "candidate-item";
     button.type = "button";
-    button.setAttribute("aria-pressed", String(entry.id === selectedEntry?.id));
+    button.setAttribute("aria-pressed", String(!isDeleteSelectionMode && entry.id === selectedEntry?.id));
+    if (isDeleteSelectionMode) {
+      button.classList.add("selectable");
+      button.setAttribute("aria-selected", String(selectedDeleteIds.has(entry.id)));
+    }
     button.addEventListener("click", () => {
+      if (isDeleteSelectionMode) {
+        toggleDeleteSelection(entry.id);
+        render();
+        return;
+      }
       updateWithTransition(() => {
         selectedEntry = entry;
         render();
@@ -120,6 +144,13 @@ function renderHistoryList() {
 
     const nameRow = document.createElement("span");
     nameRow.className = "candidate-name-row";
+
+    if (isDeleteSelectionMode) {
+      const checkbox = document.createElement("span");
+      checkbox.className = "candidate-check";
+      checkbox.textContent = selectedDeleteIds.has(entry.id) ? "✓" : "";
+      nameRow.append(checkbox);
+    }
 
     const name = document.createElement("span");
     name.className = "candidate-name";
@@ -151,23 +182,67 @@ function renderHistoryList() {
   }
 }
 
+function enterDeleteSelectionMode() {
+  isDeleteSelectionMode = true;
+  selectedDeleteIds = new Set(selectedEntry?.id ? [selectedEntry.id] : []);
+}
+
+function exitDeleteSelectionMode() {
+  isDeleteSelectionMode = false;
+  selectedDeleteIds = new Set();
+}
+
+function toggleDeleteSelection(id) {
+  if (selectedDeleteIds.has(id)) {
+    selectedDeleteIds.delete(id);
+  } else {
+    selectedDeleteIds.add(id);
+  }
+}
+
+function updateDeleteActions() {
+  if (isDeleteSelectionMode) {
+    deleteCandidateButton.textContent = selectedDeleteIds.size
+      ? `删除已选 ${selectedDeleteIds.size} 条`
+      : "取消删除";
+    renameCandidateButton.disabled = true;
+    copyConclusionButton.disabled = true;
+    clearHistoryButton.disabled = true;
+    return;
+  }
+
+  deleteCandidateButton.textContent = "删除该记录";
+}
+
 function renderSelectedEntry() {
   reportRoot.innerHTML = "";
-  copyConclusionButton.disabled = !selectedEntry?.copyableConclusion;
-  renameCandidateButton.disabled = !selectedEntry;
-  deleteCandidateButton.disabled = !selectedEntry;
+  copyConclusionButton.disabled = isDeleteSelectionMode || !selectedEntry?.copyableConclusion;
+  renameCandidateButton.disabled = isDeleteSelectionMode || !selectedEntry;
+  deleteCandidateButton.disabled = !historyEntries.length;
 
   if (!selectedEntry) {
-    detailTitle.textContent = "解析详情";
-    detailMeta.textContent = "选择一位候选人查看报告。";
+    detailTitle.textContent = isDeleteSelectionMode ? "????????" : "????";
+    detailMeta.textContent = isDeleteSelectionMode ? "????????????????????" : "????????????";
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = "暂无可查看的解析报告。";
+    empty.textContent = "???????????";
     reportRoot.append(empty);
     return;
   }
 
-  detailTitle.textContent = selectedEntry.candidateName || "姓名未识别";
+  if (isDeleteSelectionMode) {
+    detailTitle.textContent = "????????";
+    detailMeta.textContent = selectedDeleteIds.size
+      ? `??? ${selectedDeleteIds.size} ???????????`
+      : "????????????????????????";
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "??????????????????";
+    reportRoot.append(empty);
+    return;
+  }
+
+  detailTitle.textContent = selectedEntry.candidateName || "?????";
   detailMeta.textContent = [
     formatHistoryTime(selectedEntry.createdAt),
     selectedEntry.source,
@@ -176,7 +251,7 @@ function renderSelectedEntry() {
     selectedEntry.recommendation
   ]
     .filter(Boolean)
-    .join(" · ");
+    .join(" ? ");
 
   renderReport(selectedEntry.analysis, selectedEntry.batchResults || []);
 }

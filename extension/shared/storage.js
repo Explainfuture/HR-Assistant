@@ -89,6 +89,16 @@ export async function deleteAnalysisHistoryEntry(id) {
   return nextHistory;
 }
 
+export async function deleteAnalysisHistoryEntries(ids) {
+  const targetIds = new Set(ensureArray(ids).map(compactText).filter(Boolean));
+  if (!targetIds.size) return listAnalysisHistory();
+
+  const history = await listAnalysisHistory();
+  const nextHistory = history.filter((entry) => !targetIds.has(entry.id));
+  await chrome.storage.local.set({ [ANALYSIS_HISTORY_KEY]: nextHistory });
+  return nextHistory;
+}
+
 export async function updateAnalysisHistoryEntry(id, patch) {
   const history = await listAnalysisHistory();
   const nextHistory = history.map((entry) =>

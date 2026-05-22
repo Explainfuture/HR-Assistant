@@ -1,5 +1,8 @@
 (function () {
   const MESSAGE_TYPE = "RESUME_COPILOT_EXTRACT_RESUME";
+  const MAX_RESUME_IMAGES = 8;
+  const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+  const MAX_IMAGE_EDGE = 1800;
   const NAME_LABEL_RE =
     /(?:姓名|候选人|人才|name|candidate)[:：\s]+([\u4e00-\u9fa5·]{2,8}|[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,3})/i;
   const CHINESE_NAME_RE = /^[\u4e00-\u9fa5·]{2,6}$/;
@@ -93,27 +96,226 @@
     debug.rawLength = rawText.length;
 
     const text = cleanResumeText(rawText);
-    if (text.length < 80) {
+    const imageUrls = await collectResumeImageUrls(container);
+    if (text.length < 80 && !imageUrls.length) {
       throw new Error("采集到的文本过短，请确认当前页面已打开候选人简历详情");
     }
 
     return {
       ok: true,
       text,
-      imageUrls: collectResumeImageUrls(container),
+      imageUrls,
       candidateName: inferCandidateName(text, container),
       debug
     };
   }
 
 
-  function collectResumeImageUrls(container) {
-    const urls = [...container.querySelectorAll("img")]
-      .map((img) => img.currentSrc || img.src || "")
-      .map((url) => String(url || "").trim())
-      .filter((url) => /^https?:\/\//i.test(url))
-      .filter((url) => !/avatar|icon|logo|qrcode|emoji/i.test(url));
-    return [...new Set(urls)].slice(0, 8);
+  async function collectResumeImageUrls(container) {
+    const candidates = collectResumeImageCandidates(container);
+    const urls = [];
+    const seen = new Set();
+
+    for (const candidate of candidates) {
+      const url = await normalizeResumeImageCandidate(candidate);
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      urls.push(url);
+      if (urls.length >= MAX_RESUME_IMAGES) break;
+    }
+
+    return urls;
+  }
+
+  function collectResumeImageCandidates(container) {
+    const candidates = [];
+
+    for (const img of container.querySelectorAll("img")) {
+      for (const url of [
+        img.currentSrc,
+        img.src,
+        ...parseSrcset(img.srcset),
+        img.dataset?.src,
+        img.dataset?.url,
+        img.dataset?.original,
+        img.dataset?.lazySrc
+      ]) {
+        addImageCandidate(candidates, { url, node: img, score: scoreImageNode(img) });
+      }
+    }
+
+    for (const source of container.querySelectorAll("source")) {
+      for (const url of parseSrcset(source.srcset)) {
+        addImageCandidate(candidates, { url, node: source, score: 40 });
+      }
+    }
+
+    for (const link of container.querySelectorAll("a[href]")) {
+      const href = link.getAttribute("href");
+      if (/\.(?:png|jpe?g|webp)(?:[?#].*)?$/i.test(href || "")) {
+        addImageCandidate(candidates, { url: link.href, node: link, score: 35 });
+      }
+    }
+
+    for (const node of container.querySelectorAll("[style]")) {
+      for (const url of extractCssUrls(node.getAttribute("style"))) {
+        addImageCandidate(candidates, { url, node, score: scoreImageNode(node) - 20 });
+      }
+    }
+
+    for (const canvas of container.querySelectorAll("canvas")) {
+      if (!isVisible(canvas)) continue;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width < 220 || rect.height < 280) continue;
+      candidates.push({ canvas, score: rect.width * rect.height + 100000 });
+    }
+
+    return candidates
+      .filter((candidate) => candidate.canvas || isUsefulImageUrl(candidate.url))
+      .sort((a, b) => b.score - a.score);
+  }
+
+  function addImageCandidate(candidates, candidate) {
+    const url = normalizeImageUrl(candidate.url);
+    if (!url || !isUsefulImageUrl(url)) return;
+    candidates.push({ ...candidate, url });
+  }
+
+  async function normalizeResumeImageCandidate(candidate) {
+    if (candidate.canvas) return canvasToDataUrl(candidate.canvas);
+
+    const imageDataUrl = candidate.node instanceof HTMLImageElement
+      ? imageElementToDataUrl(candidate.node)
+      : "";
+    if (imageDataUrl) return imageDataUrl;
+
+    const url = normalizeImageUrl(candidate.url);
+    if (!url) return "";
+    if (/^data:image\//i.test(url)) return url.length <= MAX_IMAGE_BYTES * 2 ? url : "";
+
+    const fetchedDataUrl = await fetchImageAsDataUrl(url);
+    if (fetchedDataUrl) return fetchedDataUrl;
+
+    return /^https?:\/\//i.test(url) ? url : "";
+  }
+
+  function imageElementToDataUrl(img) {
+    if (!img.complete || !img.naturalWidth || !img.naturalHeight) return "";
+    try {
+      const canvas = document.createElement("canvas");
+      const { width, height } = fitImageSize(img.naturalWidth, img.naturalHeight);
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      return canvas.toDataURL("image/jpeg", 0.86);
+    } catch {
+      return "";
+    }
+  }
+
+  function canvasToDataUrl(sourceCanvas) {
+    try {
+      const { width, height } = fitImageSize(sourceCanvas.width, sourceCanvas.height);
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d").drawImage(sourceCanvas, 0, 0, width, height);
+      return canvas.toDataURL("image/jpeg", 0.86);
+    } catch {
+      return "";
+    }
+  }
+
+  async function fetchImageAsDataUrl(url) {
+    if (!/^https?:\/\//i.test(url) && !/^blob:/i.test(url)) return "";
+    try {
+      const response = await fetch(url, { credentials: "include" });
+      if (!response.ok) return "";
+      const blob = await response.blob();
+      if (!/^image\//i.test(blob.type) || blob.size > MAX_IMAGE_BYTES) return "";
+      return await blobToDataUrl(blob);
+    } catch {
+      return "";
+    }
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function fitImageSize(width, height) {
+    const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(width, height));
+    return {
+      width: Math.max(1, Math.round(width * scale)),
+      height: Math.max(1, Math.round(height * scale))
+    };
+  }
+
+  function scoreImageNode(node) {
+    if (!(node instanceof Element)) return 0;
+    const rect = node.getBoundingClientRect();
+    const text = `${node.getAttribute("alt") || ""} ${node.className || ""} ${node.id || ""}`;
+    let score = rect.width * rect.height;
+    if (/resume|cv|jianli|简历|附件|pdf|preview/i.test(text)) score += 100000;
+    if (rect.width >= 220 && rect.height >= 280) score += 50000;
+    return score;
+  }
+
+  function scoreResumeVisuals(container) {
+    let score = 0;
+    for (const img of container.querySelectorAll("img")) {
+      const url = img.currentSrc || img.src || "";
+      if (!isUsefulImageUrl(url)) continue;
+      const rect = img.getBoundingClientRect();
+      if (rect.width >= 220 && rect.height >= 280) score += rect.width * rect.height;
+    }
+    for (const canvas of container.querySelectorAll("canvas")) {
+      if (!isVisible(canvas)) continue;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width >= 220 && rect.height >= 280) score += rect.width * rect.height;
+    }
+    return score;
+  }
+
+  function normalizeImageUrl(url) {
+    const value = String(url || "").trim();
+    if (!value) return "";
+    if (/^(?:data:image\/|blob:|https?:\/\/)/i.test(value)) return value;
+    try {
+      return new URL(value, location.href).href;
+    } catch {
+      return "";
+    }
+  }
+
+  function isUsefulImageUrl(url) {
+    const value = String(url || "").trim();
+    if (!value) return false;
+    if (!/^(?:data:image\/|blob:|https?:\/\/)/i.test(value)) return false;
+    return !/avatar|icon|logo|qrcode|emoji|sprite|favicon|default|placeholder/i.test(value);
+  }
+
+  function parseSrcset(srcset) {
+    return String(srcset || "")
+      .split(",")
+      .map((part) => part.trim().split(/\s+/)[0])
+      .filter(Boolean);
+  }
+
+  function extractCssUrls(style) {
+    const urls = [];
+    const pattern = /url\((['"]?)(.*?)\1\)/gi;
+    let match = pattern.exec(String(style || ""));
+    while (match) {
+      urls.push(match[2]);
+      match = pattern.exec(String(style || ""));
+    }
+    return urls;
   }
   function inferCandidateName(text, container) {
     const labeled = String(text || "").match(NAME_LABEL_RE)?.[1];
@@ -201,17 +403,27 @@
       ".side-dialog",
       ".resume-detail",
       ".resume-container",
+      ".resume-content",
+      ".resume-preview",
+      ".resume-viewer",
+      ".candidate-resume",
       ".geek-detail",
       ".candidate-detail",
+      ".file-preview",
+      ".pdf-viewer",
       ".detail-card",
       ".recommend-card",
       ".boss-popup",
-      ".pop-wrap"
+      ".pop-wrap",
+      ".ant-modal",
+      ".ant-drawer",
+      '[class*="resume"]',
+      '[class*="candidate"]'
     ];
 
     const candidates = [...document.querySelectorAll(selectors.join(","))]
       .filter(isVisible)
-      .filter((node) => collectText(node).length > 120);
+      .filter((node) => collectText(node).length > 120 || scoreResumeVisuals(node) > 0);
 
     const scored = candidates
       .map((node) => ({ node, score: scoreResumeContainer(node) }))
@@ -226,9 +438,10 @@
 
   function scoreResumeContainer(node) {
     const text = collectText(node);
-    if (text.length < 120) return 0;
+    const visualScore = scoreResumeVisuals(node);
+    if (text.length < 120 && visualScore <= 0) return 0;
 
-    let score = Math.min(text.length / 100, 120);
+    let score = Math.min(text.length / 100, 120) + Math.min(visualScore / 10000, 100);
     for (const keyword of RESUME_KEYWORDS) {
       if (text.includes(keyword)) score += 18;
     }

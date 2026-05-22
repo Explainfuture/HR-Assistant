@@ -107,7 +107,7 @@ reanalyzeLastButton.addEventListener("click", async () => {
     busyLabel: "提交中…",
     idleLabel: "复用上次简历，按指定岗位再评估",
     getResumeText: async () => {
-      if (!lastResume?.text) throw new Error("请先抓取 BOSS 页面或上传 PDF 简历");
+      if (!lastResume?.text && !lastResume?.imageUrls?.length) throw new Error("请先抓取 BOSS/Moka 页面或上传 PDF 简历");
       return lastResume;
     }
   });
@@ -148,20 +148,21 @@ async function refreshLocalState({ silent = false } = {}) {
 }
 
 async function getBossResumeText() {
-  setStatus("正在抓取 BOSS 候选人弹层文本…");
+  setStatus("正在抓取当前网页候选人简历…");
   const extraction = await extractResumeFromActiveTab();
   if (!extraction?.ok) {
     throw new Error(extraction?.error || "简历采集失败");
   }
-  if (!extraction.text || extraction.text.length < 80) {
+  const imageUrls = extraction.imageUrls || [];
+  if ((!extraction.text || extraction.text.length < 80) && !imageUrls.length) {
     throw new Error("采集到的简历文本过短，请确认已打开候选人简历弹层");
   }
   return {
-    source: "BOSS 页面",
+    source: extraction.source || "网页简历",
     candidateName: extraction.candidateName,
     text: extraction.text,
-    imageUrls: extraction.imageUrls || [],
-    summary: `${extraction.candidateName || "姓名未识别"} · 已采集 ${extraction.text.length} 个字符${(extraction.imageUrls||[]).length ? ` · ${extraction.imageUrls.length} 张简历图` : ""}`
+    imageUrls,
+    summary: `${extraction.candidateName || "姓名未识别"} · 已采集 ${extraction.text.length} 个字符${imageUrls.length ? ` · ${imageUrls.length} 张简历图` : ""}`
   };
 }
 
@@ -169,7 +170,7 @@ async function getPdfResumeText() {
   const file = pdfInput.files?.[0];
   if (!file) throw new Error("请先选择 PDF 简历文件");
 
-  setStatus("正在解析 PDF 简历文本…");
+  setStatus("正在解析 PDF 简历文本并渲染页面图片…");
   const extraction = await extractTextFromPdfFile(file);
   const candidateName = inferCandidateName(extraction.text, file.name);
   return {
@@ -178,7 +179,7 @@ async function getPdfResumeText() {
     fallbackName: file.name,
     text: extraction.text,
     imageUrls: extraction.imageUrls || [],
-    summary: `${candidateName} · 已提取 ${extraction.text.length} 个字符 · ${extraction.pageCount} 页`
+    summary: `${candidateName} · 已提取 ${extraction.text.length} 个字符 · ${extraction.pageCount} 页${(extraction.imageUrls || []).length ? ` · ${extraction.imageUrls.length} 页OCR图` : ""}`
   };
 }
 
@@ -359,13 +360,27 @@ function renderHistoryButton() {
 async function extractResumeFromActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) throw new Error("无法获取当前标签页");
-  if (!tab.url?.includes("zhipin.com")) {
-    throw new Error("请在 BOSS 直聘页面使用此插件，或改用 PDF 上传分析");
+  if (!isSupportedResumePage(tab.url)) {
+    throw new Error("请在 BOSS 或 Moka 简历页面使用此插件，或改用 PDF 上传分析");
   }
 
-  return await chrome.tabs.sendMessage(tab.id, {
+  const extraction = await chrome.tabs.sendMessage(tab.id, {
     type: "RESUME_COPILOT_EXTRACT_RESUME"
   });
+  return {
+    ...extraction,
+    source: getSourceLabelForUrl(tab.url)
+  };
+}
+
+function isSupportedResumePage(url) {
+  return /(?:^|\/\/|\.)(zhipin\.com|mokahr\.com|mokahr\.com\.cn)\//i.test(String(url || ""));
+}
+
+function getSourceLabelForUrl(url) {
+  if (/mokahr/i.test(String(url || ""))) return "Moka 页面";
+  if (/zhipin/i.test(String(url || ""))) return "BOSS 页面";
+  return "网页简历";
 }
 
 function renderReport(analysis, batchResults = []) {
@@ -395,7 +410,7 @@ function setStatus(message, type = "") {
 
 function setBusy(button, busy, label) {
   for (const actionButton of actionButtons) {
-    actionButton.disabled = busy || (actionButton === reanalyzeLastButton && !lastResume?.text);
+    actionButton.disabled = busy || (actionButton === reanalyzeLastButton && !lastResume?.text && !lastResume?.imageUrls?.length);
   }
   button.textContent = label;
 }

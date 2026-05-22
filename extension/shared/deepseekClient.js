@@ -2,7 +2,7 @@ import { parseJsonLike, normalizeAnalysis, normalizeJobProfile } from "./jsonUti
 import { buildCandidateAnalysisMessages, buildJobProfileMessages } from "./prompts.js";
 
 const DOUBAO_RESPONSES_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/responses";
-const DEFAULT_REASONING_EFFORT = "low";
+const DEFAULT_REASONING_EFFORT = "high";
 
 export async function createJobProfileFromJD({ apiKey, model, jdText, internalRequirements = "" }) {
   const payload = await callDoubaoResponses({

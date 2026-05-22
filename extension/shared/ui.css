@@ -2,29 +2,32 @@
   color-scheme: light;
   --font-sans: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Microsoft YaHei", sans-serif;
   --font-mono: "Cascadia Code", Consolas, "SFMono-Regular", monospace;
-  --bg: #f6f7f9;
-  --bg-soft: #fbfcfe;
+  --bg: #f4f6f8;
+  --bg-soft: #f8fafc;
   --surface: #ffffff;
-  --surface-subtle: #fcfcfd;
-  --text: #101828;
-  --muted: #667085;
-  --subtle: #475467;
-  --border: #e4e7ec;
-  --border-strong: #d0d5dd;
-  --primary: #1570ef;
-  --primary-hover: #175cd3;
-  --primary-soft: #eff8ff;
-  --primary-text: #175cd3;
-  --success: #087443;
-  --success-soft: #ecfdf3;
+  --surface-subtle: #f9fafb;
+  --text: #111827;
+  --muted: #64748b;
+  --subtle: #475569;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-soft: #eff6ff;
+  --primary-text: #1d4ed8;
+  --success: #047857;
+  --success-soft: #ecfdf5;
   --danger: #b42318;
-  --danger-border: #fecdca;
-  --danger-soft: #fff1f3;
-  --teal: #0f766e;
-  --teal-hover: #0b5f59;
-  --shadow: 0 10px 26px rgba(16, 24, 40, 0.05);
+  --danger-border: #fecaca;
+  --danger-soft: #fff1f2;
+  --warning: #b45309;
+  --warning-soft: #fffbeb;
+  --teal: var(--primary);
+  --teal-hover: var(--primary-hover);
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-raised: 0 14px 34px rgba(15, 23, 42, 0.07);
   --radius: 8px;
-  --radius-sm: 7px;
+  --radius-sm: 6px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -68,12 +71,12 @@ h3 {
 }
 
 h1 {
-  font-size: 30px;
+  font-size: 28px;
   line-height: 1.2;
 }
 
 h2 {
-  font-size: 18px;
+  font-size: 17px;
   line-height: 1.3;
 }
 
@@ -90,8 +93,8 @@ h4 {
 
 p {
   color: var(--muted);
-  line-height: 1.6;
-  margin-top: 6px;
+  line-height: 1.55;
+  margin-top: 5px;
 }
 
 button,
@@ -108,8 +111,8 @@ button {
   color: #ffffff;
   cursor: pointer;
   font-weight: 750;
-  min-height: 38px;
-  padding: 8px 14px;
+  min-height: 36px;
+  padding: 8px 13px;
   touch-action: manipulation;
   transition:
     background-color var(--duration) ease,
@@ -137,7 +140,7 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid rgba(21, 112, 239, 0.22);
+  outline: 3px solid rgba(37, 99, 235, 0.2);
   outline-offset: 2px;
 }
 
@@ -186,10 +189,11 @@ textarea:focus-visible {
 label,
 .field {
   display: grid;
-  gap: var(--space-2);
-  color: #344054;
+  gap: 7px;
+  color: #334155;
   font-size: 13px;
   font-weight: 750;
+  min-width: 0;
 }
 
 input,
@@ -201,7 +205,7 @@ textarea {
   background: #ffffff;
   color: var(--text);
   font-weight: 400;
-  padding: 10px 12px;
+  padding: 9px 11px;
   outline: 2px solid transparent;
   outline-offset: 2px;
   transition:
@@ -255,10 +259,12 @@ textarea {
 
 .status.error {
   color: var(--danger);
+  font-weight: 650;
 }
 
 .status.success {
   color: var(--success);
+  font-weight: 650;
 }
 
 .empty,
@@ -288,7 +294,7 @@ textarea {
 .count-badge {
   background: var(--primary-soft);
   color: var(--primary-text);
-  border: 1px solid #d8e0e8;
+  border: 1px solid #bfdbfe;
   padding: 4px 9px;
   font-variant-numeric: tabular-nums;
 }
@@ -366,7 +372,7 @@ textarea {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #12b76a, var(--primary));
+  background: linear-gradient(90deg, #38bdf8, var(--primary));
 }
 
 .score-reason {
@@ -437,7 +443,7 @@ textarea {
 .item-list li {
   border-left: 3px solid var(--border-strong);
   padding-left: 11px;
-  color: #344054;
+  color: #334155;
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
@@ -456,7 +462,7 @@ textarea {
 }
 
 .ranking-list li {
-  color: #344054;
+  color: #334155;
   line-height: 1.5;
   padding-left: 2px;
 }

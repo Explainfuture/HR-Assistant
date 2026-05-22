@@ -7,6 +7,7 @@ import {
   ensureArray,
   formatJson,
   normalizeJobCategory,
+  normalizeAnalysis,
   parseJsonLike
 } from "../extension/shared/jsonUtils.js";
 import {
@@ -30,6 +31,25 @@ assert.equal(
   true,
   "Doubao host permission is required"
 );
+assert.equal(
+  manifest.host_permissions.includes("https://*.mokahr.com/*"),
+  true,
+  "Moka host permission is required"
+);
+assert.equal(
+  readFileSync(join(root, "extension/shared/deepseekClient.js"), "utf8").includes('const DEFAULT_REASONING_EFFORT = "high";'),
+  true,
+  "Doubao reasoning effort should stay high"
+);
+const pdfTextExtractorSource = readFileSync(join(root, "extension/shared/pdfTextExtractor.js"), "utf8");
+assert.equal(pdfTextExtractorSource.includes("renderPageToImageUrl"), true, "PDF pages should render to images for OCR");
+assert.equal(pdfTextExtractorSource.includes("imageUrls"), true, "PDF extractor should return rendered page images");
+assert.equal(pdfTextExtractorSource.includes("cMapUrl"), true, "PDF extractor should configure CMap assets");
+assert.equal(existsSync(join(root, "extension/vendor/pdfjs/cmaps/UniGB-UCS2-H.bcmap")), true, "PDF CMap assets should be bundled");
+assert.equal(existsSync(join(root, "extension/vendor/pdfjs/standard_fonts/LiberationSans-Regular.ttf")), true, "PDF standard fonts should be bundled");
+const historySource = readFileSync(join(root, "extension/history/history.js"), "utf8");
+assert.equal(historySource.includes("deleteAnalysisHistoryEntries"), true, "History should support batch deletion");
+assert.equal(historySource.includes("isDeleteSelectionMode"), true, "History should support delete selection mode");
 
 const requiredFiles = [
   "extension/background.js",
@@ -119,6 +139,24 @@ assert.equal(
   }),
   '{"title":"兼容式响应"}'
 );
+const sparseAnalysis = normalizeAnalysis(
+  {
+    matchedRole: { recommendation: "建议淘汰" },
+    scoreBreakdown: {
+      internalRequirements: { score: 0, maxScore: 30, reason: "岗位内部定制需求为空，无匹配基础" },
+      coreExperience: { score: 0, maxScore: 30, reason: "候选人核心经历均为后端开发，无数据标注相关核心经验" },
+      keySkills: { score: 0, maxScore: 15, reason: "无数据标注、数据分类等岗位关键技能" },
+      stability: { score: 0, maxScore: 10, reason: "无明确信息显示有充足时间参与兼职" },
+      businessUnderstanding: { score: 0, maxScore: 15, reason: "无数据标注相关业务认知" }
+    }
+  },
+  { id: "profile-1", title: "数据标注师" }
+);
+assert.ok(sparseAnalysis.experienceAnalysis.oneLineProfile.includes("数据标注师"));
+assert.ok(sparseAnalysis.experienceAnalysis.mismatchedProjects.length > 0);
+assert.ok(sparseAnalysis.elimination.reasons.length > 0);
+assert.ok(sparseAnalysis.interviewQuestions.length > 0);
+assert.ok(sparseAnalysis.copyableConclusion.includes("建议淘汰"));
 
 const javascriptFiles = requiredFiles.filter((file) => /\.(mjs|js)$/.test(file));
 for (const file of javascriptFiles) {
