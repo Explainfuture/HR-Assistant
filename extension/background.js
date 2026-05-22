@@ -96,7 +96,7 @@ async function runTask(task) {
 
   try {
     const settings = await getSettings();
-    if (!settings.apiKey) throw new Error("请先在 Options 页面配置 DeepSeek API Key");
+    if (!settings.apiKey) throw new Error("请先在 Options 页面配置 Doubao API Key");
 
     const profiles = await listJobProfiles();
     if (!profiles.length) throw new Error("请先在设置中新增岗位知识库");
@@ -125,7 +125,8 @@ async function runSingleTask(task, settings, profiles) {
     apiKey: settings.apiKey,
     model: settings.model,
     jobProfile: profile,
-    resumeText: task.resume.text
+    resumeText: task.resume.text,
+    resumeImages: task.resume.imageUrls || []
   });
   task.progress = { finished: 1, total: 1 };
   await completeTask(task, profile, analysis, []);
@@ -143,6 +144,7 @@ async function runAutoTask(task, settings, profiles) {
     model: settings.model,
     jobProfiles: candidates,
     resumeText: task.resume.text,
+    resumeImages: task.resume.imageUrls || [],
     concurrency: 3,
     onProgress: ({ finished, total }) => {
       task.progress = { finished, total };

@@ -8,7 +8,7 @@ const MAX_ANALYSIS_HISTORY = 50;
 
 const DEFAULT_SETTINGS = {
   apiKey: "",
-  model: "deepseek-v4-pro"
+  model: "doubao-seed-2-0-mini-260428"
 };
 
 export async function getSettings() {

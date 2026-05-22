@@ -137,7 +137,7 @@ async function refreshLocalState({ silent = false } = {}) {
   renderHistoryButton();
 
   if (!settings.apiKey) {
-    setStatus("请先打开设置填写 DeepSeek API Key");
+    setStatus("请先打开设置填写 Doubao API Key");
   } else if (!profiles.length) {
     setStatus("请先在设置中新增岗位知识库");
   } else if (!silent) {
@@ -160,7 +160,8 @@ async function getBossResumeText() {
     source: "BOSS 页面",
     candidateName: extraction.candidateName,
     text: extraction.text,
-    summary: `${extraction.candidateName || "姓名未识别"} · 已采集 ${extraction.text.length} 个字符`
+    imageUrls: extraction.imageUrls || [],
+    summary: `${extraction.candidateName || "姓名未识别"} · 已采集 ${extraction.text.length} 个字符${(extraction.imageUrls||[]).length ? ` · ${extraction.imageUrls.length} 张简历图` : ""}`
   };
 }
 
@@ -176,6 +177,7 @@ async function getPdfResumeText() {
     candidateName,
     fallbackName: file.name,
     text: extraction.text,
+    imageUrls: extraction.imageUrls || [],
     summary: `${candidateName} · 已提取 ${extraction.text.length} 个字符 · ${extraction.pageCount} 页`
   };
 }
@@ -186,7 +188,7 @@ async function submitAnalysisTask({ mode, busyButton, busyLabel, idleLabel, getR
     reportRoot.hidden = true;
 
     settings = await getSettings();
-    if (!settings.apiKey) throw new Error("请先在 Options 页面配置 DeepSeek API Key");
+    if (!settings.apiKey) throw new Error("请先在 Options 页面配置 Doubao API Key");
     if (!profiles.length) throw new Error("请先在设置中新增岗位知识库");
 
     const profile = mode === "single" ? getSelectedProfile() : null;

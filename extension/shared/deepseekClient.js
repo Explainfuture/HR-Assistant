@@ -1,13 +1,14 @@
 import { parseJsonLike, normalizeAnalysis, normalizeJobProfile } from "./jsonUtils.js";
 import { buildCandidateAnalysisMessages, buildJobProfileMessages } from "./prompts.js";
 
-const DEEPSEEK_ENDPOINT = "https://api.deepseek.com/chat/completions";
+const DOUBAO_RESPONSES_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/responses";
+const DEFAULT_REASONING_EFFORT = "low";
 
 export async function createJobProfileFromJD({ apiKey, model, jdText, internalRequirements = "" }) {
-  const payload = await callDeepSeek({
+  const payload = await callDoubaoResponses({
     apiKey,
     model,
-    messages: buildJobProfileMessages(jdText, internalRequirements)
+    prompt: buildJobProfileMessages(jdText, internalRequirements).map((m) => `${m.role}: ${m.content}`).join("\n\n")
   });
   return normalizeJobProfile(
     {
@@ -18,27 +19,25 @@ export async function createJobProfileFromJD({ apiKey, model, jdText, internalRe
   );
 }
 
-export async function analyzeCandidate({ apiKey, model, jobProfile, resumeText }) {
-  const payload = await callDeepSeek({
+export async function analyzeCandidate({ apiKey, model, jobProfile, resumeText, resumeImages = [] }) {
+  const resumePayload = resumeImages.length
+    ? await recognizeResumeFromImages({ apiKey, model, resumeImages })
+    : { rawText: resumeText };
+  const payload = await callDoubaoResponses({
     apiKey,
     model,
-    messages: buildCandidateAnalysisMessages(jobProfile, resumeText)
+    prompt: buildCandidateAnalysisMessages(jobProfile, resumePayload.rawText).map((m) => `${m.role}: ${m.content}`).join("\n\n")
   });
   return normalizeAnalysis(parseJsonLike(payload), jobProfile);
 }
 
-export async function analyzeCandidateAgainstProfiles({
-  apiKey,
-  model,
-  jobProfiles,
-  resumeText,
-  concurrency = 3,
-  onProgress
-}) {
+export async function analyzeCandidateAgainstProfiles({ apiKey, model, jobProfiles, resumeText, resumeImages = [], concurrency = 3, onProgress }) {
   const profiles = Array.isArray(jobProfiles) ? jobProfiles : [];
-  if (!profiles.length) {
-    throw new Error("没有可用于自动匹配的岗位知识库");
-  }
+  if (!profiles.length) throw new Error("没有可用于自动匹配的岗位知识库");
+
+  const sharedResumePayload = resumeImages.length
+    ? await recognizeResumeFromImages({ apiKey, model, resumeImages })
+    : { rawText: resumeText };
 
   const workerCount = Math.max(1, Math.min(Number(concurrency) || 1, profiles.length));
   const results = new Array(profiles.length);
@@ -50,17 +49,10 @@ export async function analyzeCandidateAgainstProfiles({
       const index = nextIndex;
       nextIndex += 1;
       const profile = profiles[index];
-
       try {
-        results[index] = {
-          profile,
-          analysis: await analyzeCandidate({ apiKey, model, jobProfile: profile, resumeText })
-        };
+        results[index] = { profile, analysis: await analyzeCandidate({ apiKey, model, jobProfile: profile, resumeText: sharedResumePayload.rawText }) };
       } catch (error) {
-        results[index] = {
-          profile,
-          error: error.message || String(error)
-        };
+        results[index] = { profile, error: error.message || String(error) };
       } finally {
         finished += 1;
         onProgress?.({ finished, total: profiles.length, profile });
@@ -72,34 +64,43 @@ export async function analyzeCandidateAgainstProfiles({
   return results;
 }
 
-async function callDeepSeek({ apiKey, model, messages }) {
-  if (!apiKey) {
-    throw new Error("请先在 Options 页面配置 DeepSeek API Key");
+async function recognizeResumeFromImages({ apiKey, model, resumeImages }) {
+  const prompt = `你是简历OCR与结构化助手。请识别图片简历，输出严格JSON：\n{\n  "resume_json": {"name":"","phone":"","email":"","education":[],"work_experience":[],"skills":[],"projects":[],"languages":[],"certifications":[]},\n  "sections": [{"title":"","content":""}],\n  "blocks": [{"index":1,"text":""}],\n  "raw_text":""\n}`;
+  const payload = await callDoubaoResponses({ apiKey, model, prompt, imageUrls: resumeImages });
+  const parsed = parseJsonLike(payload);
+  const rawText = String(parsed?.raw_text || "").trim();
+  if (rawText.length < 40) throw new Error("图片简历识别结果过短，请确认页面存在可访问的简历图片");
+  return { rawText };
+}
+
+async function callDoubaoResponses({ apiKey, model, prompt, imageUrls = [] }) {
+  if (!apiKey) throw new Error("请先在 Options 页面配置 Doubao API Key");
+
+  const inputContent = [{ type: "input_text", text: prompt }];
+  for (const url of imageUrls.slice(0, 8)) {
+    inputContent.push({ type: "input_image", image_url: url });
   }
 
-  const response = await fetch(DEEPSEEK_ENDPOINT, {
+  const response = await fetch(DOUBAO_RESPONSES_ENDPOINT, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`
-    },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model,
-      messages,
-      temperature: 0.2,
-      response_format: { type: "json_object" }
+      reasoning: { effort: DEFAULT_REASONING_EFFORT },
+      input: [{ role: "user", content: inputContent }]
     })
   });
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    throw new Error(`DeepSeek 请求失败：${response.status} ${detail.slice(0, 240)}`);
+    throw new Error(`Doubao 请求失败：${response.status} ${detail.slice(0, 240)}`);
   }
 
   const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error("DeepSeek 返回为空");
-  }
+  const outputText = data?.output_text;
+  if (outputText) return outputText;
+
+  const content = data?.output?.[0]?.content?.find((item) => item?.type === "output_text")?.text;
+  if (!content) throw new Error("Doubao 返回为空");
   return content;
 }

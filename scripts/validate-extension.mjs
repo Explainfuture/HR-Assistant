@@ -25,9 +25,9 @@ assert.equal(manifest.permissions.includes("storage"), true, "storage permission
 assert.equal(manifest.permissions.includes("sidePanel"), true, "sidePanel permission is required");
 assert.equal(manifest.permissions.includes("tabs"), true, "tabs permission is required");
 assert.equal(
-  manifest.host_permissions.includes("https://api.deepseek.com/*"),
+  manifest.host_permissions.includes("https://ark.cn-beijing.volces.com/*"),
   true,
-  "DeepSeek host permission is required"
+  "Doubao host permission is required"
 );
 
 const requiredFiles = [

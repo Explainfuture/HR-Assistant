@@ -67,7 +67,7 @@ generateProfileButton.addEventListener("click", async () => {
     if (!jdText) throw new Error("请先粘贴 JD 文本");
 
     const settings = await getSettings();
-    if (!settings.apiKey) throw new Error("请先保存 DeepSeek API Key");
+    if (!settings.apiKey) throw new Error("请先保存 Doubao API Key");
 
     setBusy(generateProfileButton, true, "生成中…");
     const profile = await createJobProfileFromJD({
