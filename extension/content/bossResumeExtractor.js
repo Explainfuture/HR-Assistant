@@ -100,11 +100,21 @@
     return {
       ok: true,
       text,
+      imageUrls: collectResumeImageUrls(container),
       candidateName: inferCandidateName(text, container),
       debug
     };
   }
 
+
+  function collectResumeImageUrls(container) {
+    const urls = [...container.querySelectorAll("img")]
+      .map((img) => img.currentSrc || img.src || "")
+      .map((url) => String(url || "").trim())
+      .filter((url) => /^https?:\/\//i.test(url))
+      .filter((url) => !/avatar|icon|logo|qrcode|emoji/i.test(url));
+    return [...new Set(urls)].slice(0, 8);
+  }
   function inferCandidateName(text, container) {
     const labeled = String(text || "").match(NAME_LABEL_RE)?.[1];
     if (isLikelyName(labeled)) return labeled;

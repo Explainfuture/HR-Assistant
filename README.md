@@ -9,7 +9,7 @@ Chrome Extension MVP for analyzing BOSS candidate resumes against a locally main
 3. Click Load unpacked.
 4. Select the `extension` folder in this repository.
 5. Open the extension Options page.
-6. Save a DeepSeek API Key.
+6. Save a Doubao API Key.
 7. Paste a JD, generate a job profile JSON, edit if needed, and save it.
 8. Open a BOSS candidate resume detail panel.
 9. Open the extension side panel, select a job profile, and click `抓取并分析`.
@@ -20,4 +20,4 @@ Chrome Extension MVP for analyzing BOSS candidate resumes against a locally main
 npm test
 ```
 
-The validation script checks the MV3 manifest, required extension files, and the JSON parser behavior used for DeepSeek responses.
+The validation script checks the MV3 manifest, required extension files, and the JSON parser behavior used for Doubao responses.
