@@ -15,6 +15,10 @@ import {
   isCandidateNameRecognized
 } from "../extension/shared/candidateUtils.js";
 import { extractDoubaoResponseText } from "../extension/shared/deepseekClient.js";
+import {
+  deleteAnalysisHistoryEntries,
+  listAnalysisHistory
+} from "../extension/shared/storage.js";
 
 const root = process.cwd();
 const manifestPath = join(root, "extension", "manifest.json");
@@ -50,6 +54,41 @@ assert.equal(existsSync(join(root, "extension/vendor/pdfjs/standard_fonts/Libera
 const historySource = readFileSync(join(root, "extension/history/history.js"), "utf8");
 assert.equal(historySource.includes("deleteAnalysisHistoryEntries"), true, "History should support batch deletion");
 assert.equal(historySource.includes("isDeleteSelectionMode"), true, "History should support delete selection mode");
+assert.equal(historySource.includes("???"), false, "History delete UI should not contain placeholder question marks");
+const storageSource = readFileSync(join(root, "extension/shared/storage.js"), "utf8");
+assert.equal(storageSource.includes("entry.id || entry.taskId"), true, "History entries should use taskId as a stable id fallback");
+assert.equal(storageSource.includes("!targetIds.has(entry.taskId)"), true, "Batch deletion should match old history entries by taskId");
+const mockChromeStorage = {
+  "resumeCopilot.analysisHistory": [
+    {
+      taskId: "legacy-task-1",
+      createdAt: "2026-05-22T08:00:00.000Z",
+      candidateName: "张三",
+      profile: { title: "数据标注师", category: "研发" },
+      analysis: {}
+    }
+  ]
+};
+globalThis.chrome = {
+  storage: {
+    local: {
+      async get(key) {
+        return { [key]: mockChromeStorage[key] };
+      },
+      async set(value) {
+        Object.assign(mockChromeStorage, value);
+      },
+      async remove(key) {
+        delete mockChromeStorage[key];
+      }
+    }
+  }
+};
+const legacyHistory = await listAnalysisHistory();
+assert.equal(legacyHistory[0].id, "legacy-task-1", "Legacy history should use taskId as stable id");
+await deleteAnalysisHistoryEntries([legacyHistory[0].id]);
+assert.equal((await listAnalysisHistory()).length, 0, "Batch deletion should remove legacy taskId-only history");
+delete globalThis.chrome;
 
 const requiredFiles = [
   "extension/background.js",

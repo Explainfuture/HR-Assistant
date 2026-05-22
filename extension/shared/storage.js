@@ -1,4 +1,4 @@
-import { compactText, createId, normalizeJobProfile } from "./jsonUtils.js";
+import { compactText, createId, ensureArray, normalizeJobProfile } from "./jsonUtils.js";
 import { isCandidateNameRecognized } from "./candidateUtils.js";
 
 const SETTINGS_KEY = "resumeCopilot.settings";
@@ -94,7 +94,7 @@ export async function deleteAnalysisHistoryEntries(ids) {
   if (!targetIds.size) return listAnalysisHistory();
 
   const history = await listAnalysisHistory();
-  const nextHistory = history.filter((entry) => !targetIds.has(entry.id));
+  const nextHistory = history.filter((entry) => !targetIds.has(entry.id) && !targetIds.has(entry.taskId));
   await chrome.storage.local.set({ [ANALYSIS_HISTORY_KEY]: nextHistory });
   return nextHistory;
 }
@@ -114,7 +114,7 @@ function normalizeAnalysisHistoryEntry(entry) {
   const profile = entry.profile || {};
   const candidateName = compactText(entry.candidateName || entry.analysis?.candidateName || "");
   return {
-    id: compactText(entry.id) || createId(),
+    id: compactText(entry.id || entry.taskId) || createId(),
     taskId: compactText(entry.taskId || ""),
     createdAt: compactText(entry.createdAt) || new Date().toISOString(),
     source: compactText(entry.source || "未知来源"),

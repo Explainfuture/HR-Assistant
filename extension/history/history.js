@@ -1,7 +1,6 @@
 import {
   clearAnalysisHistory,
   deleteAnalysisHistoryEntries,
-  deleteAnalysisHistoryEntry,
   listAnalysisHistory,
   updateAnalysisHistoryEntry
 } from "../shared/storage.js";
@@ -84,7 +83,7 @@ deleteCandidateButton.addEventListener("click", async () => {
   }
 
   const count = selectedDeleteIds.size;
-  if (!confirm(`???????? ${count} ??????????????`)) return;
+  if (!confirm(`确定删除已选 ${count} 条候选人解析记录？此操作无法撤销。`)) return;
 
   const previousSelectedId = selectedEntry?.id || "";
   historyEntries = await deleteAnalysisHistoryEntries([...selectedDeleteIds]);
@@ -221,28 +220,28 @@ function renderSelectedEntry() {
   deleteCandidateButton.disabled = !historyEntries.length;
 
   if (!selectedEntry) {
-    detailTitle.textContent = isDeleteSelectionMode ? "????????" : "????";
-    detailMeta.textContent = isDeleteSelectionMode ? "????????????????????" : "????????????";
+    detailTitle.textContent = isDeleteSelectionMode ? "选择要删除的记录" : "暂无记录";
+    detailMeta.textContent = isDeleteSelectionMode ? "勾选候选人后点击删除按钮确认。" : "暂无候选人解析历史。";
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = "???????????";
+    empty.textContent = "暂无候选人历史。";
     reportRoot.append(empty);
     return;
   }
 
   if (isDeleteSelectionMode) {
-    detailTitle.textContent = "????????";
+    detailTitle.textContent = "选择要删除的记录";
     detailMeta.textContent = selectedDeleteIds.size
-      ? `??? ${selectedDeleteIds.size} ???????????`
-      : "????????????????????????";
+      ? `已选择 ${selectedDeleteIds.size} 条候选人解析记录。`
+      : "点击左侧候选人记录进行多选。";
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = "??????????????????";
+    empty.textContent = "删除模式下暂不显示解析详情。";
     reportRoot.append(empty);
     return;
   }
 
-  detailTitle.textContent = selectedEntry.candidateName || "?????";
+  detailTitle.textContent = selectedEntry.candidateName || "姓名未识别";
   detailMeta.textContent = [
     formatHistoryTime(selectedEntry.createdAt),
     selectedEntry.source,
@@ -251,7 +250,7 @@ function renderSelectedEntry() {
     selectedEntry.recommendation
   ]
     .filter(Boolean)
-    .join(" ? ");
+    .join(" · ");
 
   renderReport(selectedEntry.analysis, selectedEntry.batchResults || []);
 }
