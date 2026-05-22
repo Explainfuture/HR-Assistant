@@ -1,4 +1,5 @@
 import * as pdfjsLib from "../vendor/pdfjs/pdf.min.mjs";
+import { shouldRenderPdfPageImages } from "./pdfPolicy.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL(
   "vendor/pdfjs/pdf.worker.min.mjs"
@@ -38,14 +39,17 @@ export async function extractTextFromPdfFile(file) {
       .map((item) => ("str" in item ? item.str : ""))
       .join(" ");
     pages.push(cleanPdfText(text));
+  }
 
-    if (imageUrls.length < MAX_RENDERED_PAGES) {
+  const text = cleanPdfText(pages.join("\n\n"));
+  if (shouldRenderPdfPageImages(text)) {
+    for (let pageNumber = 1; pageNumber <= Math.min(pdf.numPages, MAX_RENDERED_PAGES); pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
       const imageUrl = await renderPageToImageUrl(page);
       if (imageUrl) imageUrls.push(imageUrl);
     }
   }
 
-  const text = cleanPdfText(pages.join("\n\n"));
   if (text.length < 80 && !imageUrls.length) {
     throw new Error("PDF text is too short and page image rendering failed; OCR cannot be submitted.");
   }

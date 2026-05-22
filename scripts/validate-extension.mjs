@@ -17,8 +17,11 @@ import {
 import { extractDoubaoResponseText } from "../extension/shared/deepseekClient.js";
 import {
   deleteAnalysisHistoryEntries,
+  listAnalysisTasks,
   listAnalysisHistory
 } from "../extension/shared/storage.js";
+import { ERROR_TYPES, classifyError } from "../extension/shared/errorUtils.js";
+import { shouldRenderPdfPageImages } from "../extension/shared/pdfPolicy.js";
 
 const root = process.cwd();
 const manifestPath = join(root, "extension", "manifest.json");
@@ -48,6 +51,7 @@ assert.equal(
 const pdfTextExtractorSource = readFileSync(join(root, "extension/shared/pdfTextExtractor.js"), "utf8");
 assert.equal(pdfTextExtractorSource.includes("renderPageToImageUrl"), true, "PDF pages should render to images for OCR");
 assert.equal(pdfTextExtractorSource.includes("imageUrls"), true, "PDF extractor should return rendered page images");
+assert.equal(pdfTextExtractorSource.includes("shouldRenderPdfPageImages"), true, "PDF image rendering should be conditional");
 assert.equal(pdfTextExtractorSource.includes("cMapUrl"), true, "PDF extractor should configure CMap assets");
 assert.equal(existsSync(join(root, "extension/vendor/pdfjs/cmaps/UniGB-UCS2-H.bcmap")), true, "PDF CMap assets should be bundled");
 assert.equal(existsSync(join(root, "extension/vendor/pdfjs/standard_fonts/LiberationSans-Regular.ttf")), true, "PDF standard fonts should be bundled");
@@ -55,9 +59,16 @@ const historySource = readFileSync(join(root, "extension/history/history.js"), "
 assert.equal(historySource.includes("deleteAnalysisHistoryEntries"), true, "History should support batch deletion");
 assert.equal(historySource.includes("isDeleteSelectionMode"), true, "History should support delete selection mode");
 assert.equal(historySource.includes("???"), false, "History delete UI should not contain placeholder question marks");
+const reportRendererSource = readFileSync(join(root, "extension/shared/reportRenderer.js"), "utf8");
+assert.equal(reportRendererSource.includes("score-evidence"), true, "Analysis report should render resume evidence");
+assert.equal(reportRendererSource.includes("confidence:"), true, "Analysis report should render evidence confidence");
 const storageSource = readFileSync(join(root, "extension/shared/storage.js"), "utf8");
 assert.equal(storageSource.includes("entry.id || entry.taskId"), true, "History entries should use taskId as a stable id fallback");
 assert.equal(storageSource.includes("!targetIds.has(entry.taskId)"), true, "Batch deletion should match old history entries by taskId");
+assert.equal(storageSource.includes("resumeCopilot.analysisTasks"), true, "Task status should be persisted for MV3 recovery");
+const backgroundSource = readFileSync(join(root, "extension/background.js"), "utf8");
+assert.equal(backgroundSource.includes("hydratePersistedTasks"), true, "Background should hydrate persisted tasks");
+assert.equal(backgroundSource.includes("TASK_INTERRUPTED"), true, "Background should mark interrupted tasks after recovery");
 const mockChromeStorage = {
   "resumeCopilot.analysisHistory": [
     {
@@ -88,7 +99,15 @@ const legacyHistory = await listAnalysisHistory();
 assert.equal(legacyHistory[0].id, "legacy-task-1", "Legacy history should use taskId as stable id");
 await deleteAnalysisHistoryEntries([legacyHistory[0].id]);
 assert.equal((await listAnalysisHistory()).length, 0, "Batch deletion should remove legacy taskId-only history");
+mockChromeStorage["resumeCopilot.analysisTasks"] = [
+  { id: "task-1", status: "running", createdAt: "2026-05-22T08:00:00.000Z", updatedAt: "2026-05-22T08:00:00.000Z" }
+];
+assert.equal((await listAnalysisTasks())[0].id, "task-1", "Persisted task status should be readable");
 delete globalThis.chrome;
+assert.equal(shouldRenderPdfPageImages("短文本"), true, "Short PDF text should render images for OCR");
+assert.equal(shouldRenderPdfPageImages("候选人".repeat(300)), false, "Long PDF text should skip image OCR");
+assert.equal(classifyError("Doubao 返回为空"), ERROR_TYPES.MODEL_EMPTY_RESPONSE);
+assert.equal(classifyError("任务被浏览器回收中断"), ERROR_TYPES.TASK_INTERRUPTED);
 
 const requiredFiles = [
   "extension/background.js",
@@ -108,6 +127,8 @@ const requiredFiles = [
   "extension/shared/jsonUtils.js",
   "extension/shared/candidateUtils.js",
   "extension/shared/pdfTextExtractor.js",
+  "extension/shared/pdfPolicy.js",
+  "extension/shared/errorUtils.js",
   "extension/shared/reportRenderer.js",
   "extension/shared/viewTransitions.js",
   "extension/shared/ui.css",

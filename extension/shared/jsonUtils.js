@@ -158,11 +158,17 @@ function normalizeScoreBreakdown(value) {
           score,
           maxScore: Number.isFinite(maxScore) && maxScore > 0 ? maxScore : dimension.maxScore,
           reason: compactText(item.reason || ""),
-          evidence: ensureArray(item.evidence)
+          evidence: ensureArray(item.evidence),
+          confidence: normalizeConfidence(item.confidence)
         }
       ];
     })
   );
+}
+
+function normalizeConfidence(value) {
+  const text = compactText(value).toLowerCase();
+  return ["high", "medium", "low"].includes(text) ? text : "";
 }
 
 function normalizeExperienceAnalysis(value, scoreBreakdown, selectedProfile) {

@@ -382,6 +382,26 @@ textarea {
   line-height: 1.5;
 }
 
+.score-evidence {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius-sm);
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 12px;
+  line-height: 1.5;
+  list-style-position: inside;
+}
+
+.score-evidence::before {
+  content: "简历证据";
+  color: var(--primary-text);
+  font-weight: 800;
+}
+
 .threshold-grid {
   display: grid;
   gap: var(--space-2);

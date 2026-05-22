@@ -336,7 +336,7 @@ function taskItem(task) {
   if (task.error) {
     const error = document.createElement("div");
     error.className = "task-error";
-    error.textContent = task.error;
+    error.textContent = task.errorType ? `${task.errorType} · ${task.error}` : task.error;
     item.append(error);
   }
 

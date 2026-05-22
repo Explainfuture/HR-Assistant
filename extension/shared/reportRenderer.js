@@ -112,7 +112,10 @@ function scoreBreakdownBlock(scoreBreakdown) {
     label.textContent = item.label || dimension.label;
 
     const value = document.createElement("span");
-    value.textContent = `${Number.isFinite(score) ? score : 0}/${maxScore}`;
+    value.textContent = [
+      `${Number.isFinite(score) ? score : 0}/${maxScore}`,
+      item.confidence ? `confidence: ${item.confidence}` : ""
+    ].filter(Boolean).join(" · ");
 
     header.append(label, value);
 
@@ -126,7 +129,7 @@ function scoreBreakdownBlock(scoreBreakdown) {
     reason.className = "score-reason";
     reason.textContent = item.reason || "暂无得分说明";
 
-    row.append(header, meter, reason);
+    row.append(header, meter, reason, evidenceList(item.evidence));
     return row;
   }).filter(Boolean);
 
@@ -136,6 +139,24 @@ function scoreBreakdownBlock(scoreBreakdown) {
   node.className = "score-breakdown";
   node.append(...rows);
   return node;
+}
+
+function evidenceList(evidence) {
+  const items = Array.isArray(evidence)
+    ? evidence.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 3)
+    : [];
+  if (!items.length) return null;
+
+  const list = document.createElement("ul");
+  list.className = "score-evidence";
+
+  for (const item of items) {
+    const li = document.createElement("li");
+    li.textContent = item;
+    list.append(li);
+  }
+
+  return list;
 }
 
 function thresholdBlock(thresholdChecks) {

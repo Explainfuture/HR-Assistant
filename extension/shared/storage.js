@@ -4,7 +4,9 @@ import { isCandidateNameRecognized } from "./candidateUtils.js";
 const SETTINGS_KEY = "resumeCopilot.settings";
 const JOB_PROFILES_KEY = "resumeCopilot.jobProfiles";
 const ANALYSIS_HISTORY_KEY = "resumeCopilot.analysisHistory";
+const ANALYSIS_TASKS_KEY = "resumeCopilot.analysisTasks";
 const MAX_ANALYSIS_HISTORY = 50;
+const MAX_ANALYSIS_TASKS = 40;
 
 const DEFAULT_SETTINGS = {
   apiKey: "",
@@ -108,6 +110,22 @@ export async function updateAnalysisHistoryEntry(id, patch) {
   return nextHistory;
 }
 
+export async function listAnalysisTasks() {
+  const result = await chrome.storage.local.get(ANALYSIS_TASKS_KEY);
+  return Array.isArray(result[ANALYSIS_TASKS_KEY])
+    ? result[ANALYSIS_TASKS_KEY].map(normalizeAnalysisTask).filter(Boolean)
+    : [];
+}
+
+export async function saveAnalysisTasks(tasks) {
+  const nextTasks = ensureArray(tasks)
+    .map(normalizeAnalysisTask)
+    .filter(Boolean)
+    .slice(0, MAX_ANALYSIS_TASKS);
+  await chrome.storage.local.set({ [ANALYSIS_TASKS_KEY]: nextTasks });
+  return nextTasks;
+}
+
 function normalizeAnalysisHistoryEntry(entry) {
   if (!entry || typeof entry !== "object") return null;
 
@@ -131,5 +149,31 @@ function normalizeAnalysisHistoryEntry(entry) {
     copyableConclusion: compactText(entry.copyableConclusion || "").slice(0, 320),
     analysis: entry.analysis && typeof entry.analysis === "object" ? entry.analysis : null,
     batchResults: Array.isArray(entry.batchResults) ? entry.batchResults.slice(0, 50) : []
+  };
+}
+
+function normalizeAnalysisTask(task) {
+  if (!task || typeof task !== "object") return null;
+  return {
+    id: compactText(task.id) || createId(),
+    mode: task.mode === "auto" ? "auto" : "single",
+    status: ["queued", "running", "done", "error"].includes(task.status) ? task.status : "queued",
+    createdAt: compactText(task.createdAt) || new Date().toISOString(),
+    updatedAt: compactText(task.updatedAt) || new Date().toISOString(),
+    candidateName: compactText(task.candidateName || "姓名未识别"),
+    source: compactText(task.source || "未知来源"),
+    profileId: compactText(task.profileId || ""),
+    profileTitle: compactText(task.profileTitle || ""),
+    profileCategory: compactText(task.profileCategory || ""),
+    matchScore: task.matchScore == null ? null : Number(task.matchScore),
+    recommendation: compactText(task.recommendation || ""),
+    progress: task.progress && typeof task.progress === "object"
+      ? {
+          finished: Number(task.progress.finished || 0),
+          total: Number(task.progress.total || 0)
+        }
+      : { finished: 0, total: 0 },
+    error: compactText(task.error || ""),
+    errorType: compactText(task.errorType || "")
   };
 }

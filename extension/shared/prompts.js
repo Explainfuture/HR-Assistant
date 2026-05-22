@@ -74,35 +74,40 @@ ${resumeText}
       "score": 0,
       "maxScore": 30,
       "reason": "结合内部定制需求说明得分原因",
-      "evidence": ["简历中的证据"]
+      "evidence": ["简历中的证据"],
+      "confidence": "high/medium/low"
     },
     "coreExperience": {
       "label": "核心经历",
       "score": 0,
       "maxScore": 30,
       "reason": "说明核心岗位经历的匹配程度",
-      "evidence": ["简历中的证据"]
+      "evidence": ["简历中的证据"],
+      "confidence": "high/medium/low"
     },
     "keySkills": {
       "label": "关键技能",
       "score": 0,
       "maxScore": 15,
       "reason": "说明关键技能命中情况",
-      "evidence": ["简历中的证据"]
+      "evidence": ["简历中的证据"],
+      "confidence": "high/medium/low"
     },
     "stability": {
       "label": "稳定性",
       "score": 0,
       "maxScore": 10,
       "reason": "说明履历稳定性、空窗或跳槽风险",
-      "evidence": ["简历中的证据"]
+      "evidence": ["简历中的证据"],
+      "confidence": "high/medium/low"
     },
     "businessUnderstanding": {
       "label": "行业/业务理解",
       "score": 0,
       "maxScore": 15,
       "reason": "说明行业、业务、场景理解的匹配程度",
-      "evidence": ["简历中的证据"]
+      "evidence": ["简历中的证据"],
+      "confidence": "high/medium/low"
     }
   },
   "thresholdChecks": {

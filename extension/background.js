@@ -3,14 +3,18 @@ import { inferCandidateName, isCandidateNameRecognized } from "./shared/candidat
 import {
   getSettings,
   listJobProfiles,
+  listAnalysisTasks,
+  saveAnalysisTasks,
   saveAnalysisHistoryEntry
 } from "./shared/storage.js";
 import { createId } from "./shared/jsonUtils.js";
+import { ERROR_TYPES, normalizeTaskError } from "./shared/errorUtils.js";
 
 const TASK_CONCURRENCY = 2;
 const MAX_TASKS = 40;
 const tasks = [];
 let runningCount = 0;
+const tasksReady = hydratePersistedTasks();
 
 chrome.runtime.onInstalled.addListener(() => {
   if (chrome.sidePanel?.setPanelBehavior) {
@@ -22,15 +26,17 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "RESUME_COPILOT_SUBMIT_ANALYSIS_TASK") {
-    submitTask(message.payload)
+    ensureTasksReady().then(() => submitTask(message.payload))
       .then((task) => sendResponse({ ok: true, task }))
       .catch((error) => sendResponse({ ok: false, error: error.message || String(error) }));
     return true;
   }
 
   if (message?.type === "RESUME_COPILOT_LIST_ANALYSIS_TASKS") {
-    sendResponse({ ok: true, tasks: serializeTasks() });
-    return false;
+    ensureTasksReady()
+      .then(() => sendResponse({ ok: true, tasks: serializeTasks() }))
+      .catch((error) => sendResponse({ ok: false, error: error.message || String(error) }));
+    return true;
   }
 
   return false;
@@ -77,6 +83,7 @@ async function submitTask(payload) {
   if (tasks.length > MAX_TASKS) {
     tasks.splice(MAX_TASKS);
   }
+  await persistTasks();
   scheduleQueue();
   return serializeTask(task);
 }
@@ -97,6 +104,7 @@ function scheduleQueue() {
 async function runTask(task) {
   task.status = "running";
   task.updatedAt = new Date().toISOString();
+  await persistTasks();
 
   try {
     const settings = await getSettings();
@@ -114,10 +122,13 @@ async function runTask(task) {
     task.status = "done";
     task.updatedAt = new Date().toISOString();
   } catch (error) {
+    const taskError = normalizeTaskError(error);
     task.status = "error";
-    task.error = error.message || String(error);
+    task.error = taskError.message;
+    task.errorType = taskError.type;
     task.updatedAt = new Date().toISOString();
   }
+  await persistTasks();
 }
 
 async function runSingleTask(task, settings, profiles) {
@@ -153,6 +164,7 @@ async function runAutoTask(task, settings, profiles) {
     onProgress: ({ finished, total }) => {
       task.progress = { finished, total };
       task.updatedAt = new Date().toISOString();
+      persistTasks().catch(() => {});
     }
   });
 
@@ -231,8 +243,35 @@ function serializeTask(task) {
     matchScore: task.result?.analysis ? getMatchScore(task.result.analysis) : null,
     recommendation: task.result?.analysis?.matchedRole?.recommendation || "",
     progress: task.progress,
-    error: task.error
+    error: task.error,
+    errorType: task.errorType || ""
   };
+}
+
+async function ensureTasksReady() {
+  await tasksReady;
+}
+
+async function hydratePersistedTasks() {
+  const persistedTasks = await listAnalysisTasks();
+  const restoredTasks = persistedTasks.map((task) => {
+    if (task.status === "queued" || task.status === "running") {
+      return {
+        ...task,
+        status: "error",
+        error: "任务被浏览器回收中断，请重新提交分析。",
+        errorType: ERROR_TYPES.TASK_INTERRUPTED,
+        updatedAt: new Date().toISOString()
+      };
+    }
+    return task;
+  });
+  tasks.splice(0, tasks.length, ...restoredTasks.slice(0, MAX_TASKS));
+  await persistTasks();
+}
+
+async function persistTasks() {
+  await saveAnalysisTasks(serializeTasks());
 }
 
 function getMatchScore(analysis) {
