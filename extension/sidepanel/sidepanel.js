@@ -2,6 +2,7 @@ import { extractTextFromPdfFile } from "../shared/pdfTextExtractor.js";
 import { inferCandidateName } from "../shared/candidateUtils.js";
 import { JOB_CATEGORIES } from "../shared/jsonUtils.js";
 import { renderAnalysisReport } from "../shared/reportRenderer.js";
+import { createResumeFingerprint } from "../shared/resumeFingerprint.js";
 import { markEntered, updateWithTransition } from "../shared/viewTransitions.js";
 import {
   getSettings,
@@ -24,6 +25,9 @@ const statusText = document.querySelector("#statusText");
 const captureBlock = document.querySelector("#captureBlock");
 const captureSummary = document.querySelector("#captureSummary");
 const taskList = document.querySelector("#taskList");
+const historySummary = document.querySelector("#historySummary");
+const candidateCount = document.querySelector("#candidateCount");
+const historyList = document.querySelector("#historyList");
 const reportRoot = document.querySelector("#reportRoot");
 const actionButtons = [
   autoMatchBossButton,
@@ -32,13 +36,18 @@ const actionButtons = [
   analyzePdfButton,
   reanalyzeLastButton
 ];
+const AUTO_CAPTURE_INTERVAL_MS = 2400;
 
 let settings = null;
 let profiles = [];
 let historyEntries = [];
+let selectedHistoryEntry = null;
 let lastConclusion = "";
 let lastResume = null;
 let taskPollTimer = 0;
+let autoCaptureTimer = 0;
+let autoCaptureInFlight = false;
+let lastAutoFingerprint = "";
 
 init();
 
@@ -58,6 +67,17 @@ historyButton.addEventListener("click", async () => {
 
 categorySelect.addEventListener("change", () => {
   renderProfileOptions();
+});
+
+chrome.tabs?.onActivated?.addListener(() => {
+  lastAutoFingerprint = "";
+  window.setTimeout(() => autoCaptureActiveResume(), 500);
+});
+
+chrome.tabs?.onUpdated?.addListener((_tabId, changeInfo, tab) => {
+  if (changeInfo.status !== "complete" || !isSupportedResumePage(tab?.url)) return;
+  lastAutoFingerprint = "";
+  window.setTimeout(() => autoCaptureActiveResume(), 800);
 });
 
 autoMatchBossButton.addEventListener("click", async () => {
@@ -117,6 +137,8 @@ async function init() {
   await refreshLocalState({ silent: true });
   await refreshTasks();
   startTaskPolling();
+  startAutoCapturePolling();
+  window.setTimeout(() => autoCaptureActiveResume(), 600);
 }
 
 async function refreshLocalState({ silent = false } = {}) {
@@ -134,7 +156,10 @@ async function refreshLocalState({ silent = false } = {}) {
   if ([...profileSelect.options].some((option) => option.value === selectedProfileId)) {
     profileSelect.value = selectedProfileId;
   }
+  syncSelectedHistoryEntry();
   renderHistoryButton();
+  renderHistoryList();
+  renderSelectedHistoryReport();
 
   if (!settings.apiKey) {
     setStatus("请先打开设置填写 Doubao API Key");
@@ -143,7 +168,7 @@ async function refreshLocalState({ silent = false } = {}) {
   } else if (!silent) {
     setStatus("岗位列表已刷新", "success");
   } else {
-    setStatus("打开候选人简历后提交后台解析任务");
+    setStatus("打开候选人简历后会自动提交后台解析任务");
   }
 }
 
@@ -153,17 +178,11 @@ async function getBossResumeText() {
   if (!extraction?.ok) {
     throw new Error(extraction?.error || "简历采集失败");
   }
-  const imageUrls = extraction.imageUrls || [];
-  if ((!extraction.text || extraction.text.length < 80) && !imageUrls.length) {
+  const resume = buildResumeFromExtraction(extraction);
+  if ((!resume.text || resume.text.length < 80) && !resume.imageUrls.length) {
     throw new Error("采集到的简历文本过短，请确认已打开候选人简历弹层");
   }
-  return {
-    source: extraction.source || "网页简历",
-    candidateName: extraction.candidateName,
-    text: extraction.text,
-    imageUrls,
-    summary: `${extraction.candidateName || "姓名未识别"} · 已采集 ${extraction.text.length} 个字符${imageUrls.length ? ` · ${imageUrls.length} 张简历图` : ""}`
-  };
+  return resume;
 }
 
 async function getPdfResumeText() {
@@ -186,7 +205,6 @@ async function getPdfResumeText() {
 async function submitAnalysisTask({ mode, busyButton, busyLabel, idleLabel, getResumeText }) {
   try {
     setBusy(busyButton, true, busyLabel);
-    reportRoot.hidden = true;
 
     settings = await getSettings();
     if (!settings.apiKey) throw new Error("请先在 Options 页面配置 Doubao API Key");
@@ -207,12 +225,17 @@ async function submitAnalysisTask({ mode, busyButton, busyLabel, idleLabel, getR
         mode,
         category: categorySelect.value,
         profileId: profile?.id || "",
-        resume
+        resume,
+        dedupe: mode === "auto"
       }
     });
     if (!response?.ok) throw new Error(response?.error || "后台任务提交失败");
 
-    setStatus(`${response.task.candidateName} 已提交后台解析，可继续打开下一个简历`, "success");
+    if (response.task?.deduped) {
+      setStatus(`${response.task.candidateName} 已解析过，已跳过重复任务`, "success");
+    } else {
+      setStatus(`${response.task.candidateName} 已提交后台解析，可继续打开下一个简历`, "success");
+    }
     await refreshTasks();
   } catch (error) {
     setStatus(error.message || String(error), "error");
@@ -278,13 +301,79 @@ async function refreshTasks() {
 
   if ((response.tasks || []).some((task) => task.status === "done")) {
     historyEntries = await listAnalysisHistory();
+    syncSelectedHistoryEntry();
     renderHistoryButton();
+    renderHistoryList();
+    renderSelectedHistoryReport();
   }
 }
 
 function startTaskPolling() {
   if (taskPollTimer) window.clearInterval(taskPollTimer);
   taskPollTimer = window.setInterval(refreshTasks, 2500);
+}
+
+function startAutoCapturePolling() {
+  if (autoCaptureTimer) window.clearInterval(autoCaptureTimer);
+  autoCaptureTimer = window.setInterval(() => autoCaptureActiveResume(), AUTO_CAPTURE_INTERVAL_MS);
+}
+
+async function autoCaptureActiveResume() {
+  if (autoCaptureInFlight || !settings?.apiKey || !profiles.length) return;
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id || !isSupportedResumePage(tab.url)) return;
+
+  autoCaptureInFlight = true;
+  try {
+    const extraction = await extractResumeFromTab(tab);
+    if (!extraction?.ok) return;
+
+    const resume = buildResumeFromExtraction(extraction);
+    if ((!resume.text || resume.text.length < 80) && !resume.imageUrls.length) return;
+
+    const resumeFingerprint = createResumeFingerprint(resume);
+    if (!resumeFingerprint || resumeFingerprint === lastAutoFingerprint) return;
+
+    const response = await chrome.runtime.sendMessage({
+      type: "RESUME_COPILOT_SUBMIT_ANALYSIS_TASK",
+      payload: {
+        mode: "auto",
+        category: categorySelect.value,
+        profileId: "",
+        resume,
+        resumeFingerprint,
+        dedupe: true,
+        autoTriggered: true
+      }
+    });
+    if (!response?.ok) throw new Error(response?.error || "后台任务提交失败");
+
+    lastAutoFingerprint = resumeFingerprint;
+    lastResume = resume;
+    reanalyzeLastButton.disabled = false;
+    captureSummary.textContent = resume.summary;
+    captureBlock.hidden = false;
+
+    if (response.task?.deduped) {
+      setStatus(`${response.task.candidateName} 已解析过，自动跳过`, "success");
+    } else {
+      setStatus(`${response.task.candidateName} 已自动提交后台解析`, "success");
+    }
+    await refreshTasks();
+  } catch (error) {
+    if (!isSilentAutoCaptureError(error)) {
+      setStatus(error.message || String(error), "error");
+    }
+  } finally {
+    autoCaptureInFlight = false;
+  }
+}
+
+function isSilentAutoCaptureError(error) {
+  return /未检测到候选人|文本过短|Receiving end does not exist|Could not establish connection|Extension context invalidated/i.test(
+    error?.message || String(error)
+  );
 }
 
 function renderTasks(tasks) {
@@ -353,8 +442,75 @@ function taskStatusText(task) {
   return "失败";
 }
 
+function syncSelectedHistoryEntry() {
+  if (selectedHistoryEntry) {
+    selectedHistoryEntry = historyEntries.find((entry) => entry.id === selectedHistoryEntry.id) || null;
+  }
+  if (!selectedHistoryEntry) {
+    selectedHistoryEntry = historyEntries[0] || null;
+  }
+}
+
+function renderHistoryList() {
+  candidateCount.textContent = String(historyEntries.length);
+  historySummary.textContent = historyEntries.length
+    ? `最近 ${historyEntries.length} 位候选人的解析结果`
+    : "打开候选人简历后会自动进入这里";
+  historyList.innerHTML = "";
+
+  if (!historyEntries.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "暂无候选人历史";
+    historyList.append(empty);
+    return;
+  }
+
+  for (const entry of historyEntries) {
+    const button = document.createElement("button");
+    button.className = "candidate-item";
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(entry.id === selectedHistoryEntry?.id));
+    button.addEventListener("click", () => {
+      selectedHistoryEntry = entry;
+      renderHistoryList();
+      renderSelectedHistoryReport();
+    });
+
+    const nameRow = document.createElement("span");
+    nameRow.className = "candidate-name-row";
+
+    const name = document.createElement("span");
+    name.className = "candidate-name";
+    name.textContent = entry.candidateName || "姓名未识别";
+
+    const score = document.createElement("span");
+    score.className = "candidate-score";
+    score.textContent = Number.isFinite(Number(entry.matchScore)) ? `${Number(entry.matchScore)}` : "-";
+
+    const meta = document.createElement("span");
+    meta.className = "candidate-meta";
+    meta.textContent = [
+      formatHistoryTime(entry.createdAt),
+      entry.source,
+      entry.profile?.category,
+      entry.profile?.title
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    const recommendation = document.createElement("span");
+    recommendation.className = "candidate-recommendation";
+    recommendation.textContent = entry.recommendation || "需要人工复核";
+
+    nameRow.append(name, score);
+    button.append(nameRow, meta, recommendation);
+    historyList.append(button);
+  }
+}
+
 function renderHistoryButton() {
-  historyButton.textContent = `历史 ${historyEntries.length}`;
+  historyButton.textContent = `历史页 ${historyEntries.length}`;
 }
 
 async function extractResumeFromActiveTab() {
@@ -364,12 +520,28 @@ async function extractResumeFromActiveTab() {
     throw new Error("请在 BOSS 或 Moka 简历页面使用此插件，或改用 PDF 上传分析");
   }
 
+  return extractResumeFromTab(tab);
+}
+
+async function extractResumeFromTab(tab) {
   const extraction = await chrome.tabs.sendMessage(tab.id, {
     type: "RESUME_COPILOT_EXTRACT_RESUME"
   });
   return {
     ...extraction,
     source: getSourceLabelForUrl(tab.url)
+  };
+}
+
+function buildResumeFromExtraction(extraction) {
+  const imageUrls = extraction.imageUrls || [];
+  const text = String(extraction.text || "");
+  return {
+    source: extraction.source || "网页简历",
+    candidateName: extraction.candidateName,
+    text,
+    imageUrls,
+    summary: `${extraction.candidateName || "姓名未识别"} · 已采集 ${text.length} 个字符${imageUrls.length ? ` · ${imageUrls.length} 张简历图` : ""}`
   };
 }
 
@@ -383,16 +555,27 @@ function getSourceLabelForUrl(url) {
   return "网页简历";
 }
 
-function renderReport(analysis, batchResults = []) {
-  lastConclusion = analysis?.copyableConclusion || "";
+function renderSelectedHistoryReport() {
+  reportRoot.innerHTML = "";
+  if (!selectedHistoryEntry) {
+    reportRoot.hidden = true;
+    return;
+  }
+
+  const analysis = selectedHistoryEntry.analysis;
+  const batchResults = selectedHistoryEntry.batchResults || [];
+  lastConclusion = selectedHistoryEntry.copyableConclusion || analysis?.copyableConclusion || "";
   updateWithTransition(() => {
     reportRoot.innerHTML = "";
     reportRoot.hidden = false;
+    reportRoot.append(renderHistoryDetailHeader(selectedHistoryEntry));
     reportRoot.append(
       renderAnalysisReport({
         analysis,
         batchResults,
-        fallbackProfileTitle: "未命名岗位",
+        fallbackProfileTitle: selectedHistoryEntry.profile?.title || "未命名岗位",
+        fallbackScore: selectedHistoryEntry.matchScore,
+        fallbackRecommendation: selectedHistoryEntry.recommendation,
         copyableConclusion: lastConclusion,
         includeCopyButton: true,
         onCopy: () => setStatus("总结已复制", "success"),
@@ -401,6 +584,39 @@ function renderReport(analysis, batchResults = []) {
     );
   });
   markEntered(reportRoot);
+}
+
+function renderHistoryDetailHeader(entry) {
+  const header = document.createElement("div");
+  header.className = "selected-history-header";
+
+  const title = document.createElement("h2");
+  title.textContent = entry.candidateName || "姓名未识别";
+
+  const meta = document.createElement("p");
+  meta.textContent = [
+    formatHistoryTime(entry.createdAt),
+    entry.source,
+    entry.profile?.category,
+    entry.profile?.title,
+    entry.recommendation
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  header.append(title, meta);
+  return header;
+}
+
+function formatHistoryTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
 }
 
 function setStatus(message, type = "") {

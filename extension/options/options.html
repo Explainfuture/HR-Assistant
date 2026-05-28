@@ -56,6 +56,19 @@
         </div>
       </section>
 
+      <section class="section">
+        <div class="section-title">
+          <h2>配置备份</h2>
+          <p>导出会包含 API Key、岗位知识库、解析历史和任务摘要；请只分享给可信的人。</p>
+        </div>
+        <div class="actions backup-actions">
+          <button id="exportBackupButton" class="button-secondary" type="button">导出全部配置</button>
+          <button id="importBackupButton" class="button-secondary" type="button">导入全部配置</button>
+          <input id="backupFileInput" type="file" accept="application/json,.json" hidden />
+          <span id="backupStatus" class="status" role="status" aria-live="polite"></span>
+        </div>
+      </section>
+
       <section class="section two-column">
         <div class="composer">
           <div class="section-title">

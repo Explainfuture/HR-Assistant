@@ -7,7 +7,9 @@ import {
 } from "../shared/jsonUtils.js";
 import {
   deleteJobProfile,
+  exportResumeCopilotData,
   getSettings,
+  importResumeCopilotData,
   listJobProfiles,
   saveJobProfile,
   saveSettings
@@ -18,6 +20,10 @@ const modelInput = document.querySelector("#modelInput");
 const saveSettingsButton = document.querySelector("#saveSettingsButton");
 const settingsStatus = document.querySelector("#settingsStatus");
 const closeOptionsButton = document.querySelector("#closeOptionsButton");
+const exportBackupButton = document.querySelector("#exportBackupButton");
+const importBackupButton = document.querySelector("#importBackupButton");
+const backupFileInput = document.querySelector("#backupFileInput");
+const backupStatus = document.querySelector("#backupStatus");
 
 const jdInput = document.querySelector("#jdInput");
 const internalRequirementsInput = document.querySelector("#internalRequirementsInput");
@@ -59,6 +65,40 @@ saveSettingsButton.addEventListener("click", async () => {
     });
     return "设置已保存";
   });
+});
+
+exportBackupButton.addEventListener("click", async () => {
+  await runWithStatus(backupStatus, async () => {
+    setBusy(exportBackupButton, true, "导出中…");
+    const backup = await exportResumeCopilotData();
+    downloadJson(backup, createBackupFileName(backup.exportedAt));
+    return `已导出 ${backup.data.jobProfiles.length} 个岗位、${backup.data.analysisHistory.length} 条历史`;
+  }).finally(() => setBusy(exportBackupButton, false, "导出全部配置"));
+});
+
+importBackupButton.addEventListener("click", () => {
+  backupFileInput.value = "";
+  backupFileInput.click();
+});
+
+backupFileInput.addEventListener("change", async () => {
+  const file = backupFileInput.files?.[0];
+  if (!file) return;
+
+  await runWithStatus(backupStatus, async () => {
+    const backup = JSON.parse(await file.text());
+    const data = backup.data || backup;
+    const profileCount = Array.isArray(data.jobProfiles) ? data.jobProfiles.length : 0;
+    const historyCount = Array.isArray(data.analysisHistory) ? data.analysisHistory.length : 0;
+    if (!confirm(`导入会覆盖当前插件本地配置。确认导入 ${profileCount} 个岗位、${historyCount} 条历史？`)) {
+      return "已取消导入";
+    }
+
+    setBusy(importBackupButton, true, "导入中…");
+    const imported = await importResumeCopilotData(backup);
+    await init();
+    return `已导入 ${imported.jobProfiles.length} 个岗位、${imported.analysisHistory.length} 条历史`;
+  }).finally(() => setBusy(importBackupButton, false, "导入全部配置"));
 });
 
 generateProfileButton.addEventListener("click", async () => {
@@ -199,6 +239,26 @@ function renderCategoryOptions() {
     option.textContent = category;
     categorySelect.append(option);
   }
+}
+
+function downloadJson(data, fileName) {
+  const blob = new Blob([`${JSON.stringify(data, null, 2)}\n`], {
+    type: "application/json;charset=utf-8"
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function createBackupFileName(value) {
+  const stamp = String(value || new Date().toISOString())
+    .replace(/[:.]/g, "-")
+    .replace("T", "_")
+    .replace("Z", "");
+  return `resume-copilot-backup-${stamp}.json`;
 }
 
 async function runWithStatus(node, task) {

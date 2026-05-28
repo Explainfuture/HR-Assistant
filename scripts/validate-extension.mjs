@@ -17,11 +17,14 @@ import {
 import { extractDoubaoResponseText } from "../extension/shared/deepseekClient.js";
 import {
   deleteAnalysisHistoryEntries,
+  exportResumeCopilotData,
+  importResumeCopilotData,
   listAnalysisTasks,
   listAnalysisHistory
 } from "../extension/shared/storage.js";
 import { ERROR_TYPES, classifyError } from "../extension/shared/errorUtils.js";
 import { shouldRenderPdfPageImages } from "../extension/shared/pdfPolicy.js";
+import { createResumeFingerprint } from "../extension/shared/resumeFingerprint.js";
 
 const root = process.cwd();
 const manifestPath = join(root, "extension", "manifest.json");
@@ -67,9 +70,13 @@ const storageSource = readFileSync(join(root, "extension/shared/storage.js"), "u
 assert.equal(storageSource.includes("entry.id || entry.taskId"), true, "History entries should use taskId as a stable id fallback");
 assert.equal(storageSource.includes("!targetIds.has(entry.taskId)"), true, "Batch deletion should match old history entries by taskId");
 assert.equal(storageSource.includes("resumeCopilot.analysisTasks"), true, "Task status should be persisted for MV3 recovery");
+assert.equal(storageSource.includes("resumeFingerprint"), true, "History and task records should keep resume fingerprints");
+assert.equal(storageSource.includes("exportResumeCopilotData"), true, "Storage should support full config export");
+assert.equal(storageSource.includes("importResumeCopilotData"), true, "Storage should support full config import");
 const backgroundSource = readFileSync(join(root, "extension/background.js"), "utf8");
 assert.equal(backgroundSource.includes("hydratePersistedTasks"), true, "Background should hydrate persisted tasks");
 assert.equal(backgroundSource.includes("TASK_INTERRUPTED"), true, "Background should mark interrupted tasks after recovery");
+assert.equal(backgroundSource.includes("findDuplicateAnalysis"), true, "Background should dedupe already parsed resumes");
 const mockChromeStorage = {
   "resumeCopilot.analysisHistory": [
     {
@@ -104,11 +111,28 @@ mockChromeStorage["resumeCopilot.analysisTasks"] = [
   { id: "task-1", status: "running", createdAt: "2026-05-22T08:00:00.000Z", updatedAt: "2026-05-22T08:00:00.000Z" }
 ];
 assert.equal((await listAnalysisTasks())[0].id, "task-1", "Persisted task status should be readable");
+await importResumeCopilotData({
+  data: {
+    settings: { apiKey: "sk-test", model: "doubao-test" },
+    jobProfiles: [{ id: "profile-1", title: "测试岗位", category: "研发", jd: "Java" }],
+    analysisHistory: [{ taskId: "task-history-1", candidateName: "李四", profile: { title: "测试岗位", category: "研发" } }],
+    analysisTasks: [{ id: "task-2", status: "done", candidateName: "李四" }]
+  }
+});
+const backup = await exportResumeCopilotData();
+assert.equal(backup.data.settings.apiKey, "sk-test", "Config backup should include settings");
+assert.equal(backup.data.jobProfiles[0].id, "profile-1", "Config backup should include job profiles");
+assert.equal(backup.data.analysisHistory[0].taskId, "task-history-1", "Config backup should include history");
 delete globalThis.chrome;
 assert.equal(shouldRenderPdfPageImages("短文本"), true, "Short PDF text should render images for OCR");
 assert.equal(shouldRenderPdfPageImages("候选人".repeat(300)), false, "Long PDF text should skip image OCR");
 assert.equal(classifyError("Doubao 返回为空"), ERROR_TYPES.MODEL_EMPTY_RESPONSE);
 assert.equal(classifyError("任务被浏览器回收中断"), ERROR_TYPES.TASK_INTERRUPTED);
+assert.equal(
+  createResumeFingerprint({ text: "张三\n工作经历\nA 公司前端开发", imageUrls: [] }),
+  createResumeFingerprint({ text: "张三 工作经历 A 公司前端开发", imageUrls: [] }),
+  "Resume fingerprints should ignore whitespace-only differences"
+);
 
 const requiredFiles = [
   "extension/background.js",
@@ -130,6 +154,7 @@ const requiredFiles = [
   "extension/shared/pdfTextExtractor.js",
   "extension/shared/pdfPolicy.js",
   "extension/shared/errorUtils.js",
+  "extension/shared/resumeFingerprint.js",
   "extension/shared/reportRenderer.js",
   "extension/shared/viewTransitions.js",
   "extension/shared/ui.css",

@@ -3,12 +3,14 @@ import { inferCandidateName, isCandidateNameRecognized } from "./shared/candidat
 import {
   getSettings,
   listJobProfiles,
+  listAnalysisHistory,
   listAnalysisTasks,
   saveAnalysisTasks,
   saveAnalysisHistoryEntry
 } from "./shared/storage.js";
 import { createId } from "./shared/jsonUtils.js";
 import { ERROR_TYPES, normalizeTaskError } from "./shared/errorUtils.js";
+import { createResumeFingerprint } from "./shared/resumeFingerprint.js";
 
 const TASK_CONCURRENCY = 2;
 const MAX_TASKS = 40;
@@ -55,8 +57,19 @@ async function submitTask(payload) {
     resumeText,
     payload?.resume?.candidateName || payload?.resume?.fallbackName
   );
+  const resumeFingerprint = createResumeFingerprint({
+    text: resumeText,
+    imageUrls: resumeImageUrls
+  });
+
+  if (payload?.dedupe !== false && resumeFingerprint) {
+    const duplicate = await findDuplicateAnalysis(resumeFingerprint);
+    if (duplicate) return duplicate;
+  }
+
   const task = {
     id: createId(),
+    resumeFingerprint,
     mode: payload.mode === "auto" ? "auto" : "single",
     status: "queued",
     createdAt: new Date().toISOString(),
@@ -194,6 +207,7 @@ async function completeTask(task, profile, analysis, batchResults) {
 
   await saveAnalysisHistoryEntry({
     taskId: task.id,
+    resumeFingerprint: task.resumeFingerprint,
     source: task.source,
     candidateName,
     resumeSummary: task.resume.summary,
@@ -231,6 +245,7 @@ function serializeTasks() {
 function serializeTask(task) {
   return {
     id: task.id,
+    resumeFingerprint: task.resumeFingerprint || "",
     mode: task.mode,
     status: task.status,
     createdAt: task.createdAt,
@@ -245,6 +260,66 @@ function serializeTask(task) {
     progress: task.progress,
     error: task.error,
     errorType: task.errorType || ""
+  };
+}
+
+async function findDuplicateAnalysis(resumeFingerprint) {
+  const activeTask = tasks.find(
+    (task) =>
+      task.resumeFingerprint === resumeFingerprint &&
+      ["queued", "running"].includes(task.status)
+  );
+  if (activeTask) {
+    return {
+      ...serializeTask(activeTask),
+      deduped: true,
+      duplicateSource: "task"
+    };
+  }
+
+  const history = await listAnalysisHistory();
+  const duplicateHistory = history.find((entry) => entry.resumeFingerprint === resumeFingerprint);
+  if (duplicateHistory) {
+    return {
+      ...serializeHistoryEntryAsTask(duplicateHistory),
+      deduped: true,
+      duplicateSource: "history"
+    };
+  }
+
+  const completedTask = tasks.find(
+    (task) => task.resumeFingerprint === resumeFingerprint && task.status === "done"
+  );
+  if (!completedTask) return null;
+
+  return {
+    ...serializeTask(completedTask),
+    deduped: true,
+    duplicateSource: "task"
+  };
+}
+
+function serializeHistoryEntryAsTask(entry) {
+  return {
+    id: entry.taskId || entry.id,
+    resumeFingerprint: entry.resumeFingerprint || "",
+    mode: "auto",
+    status: "done",
+    createdAt: entry.createdAt,
+    updatedAt: entry.createdAt,
+    candidateName: entry.candidateName,
+    source: entry.source,
+    profileId: entry.profile?.id || "",
+    profileTitle: entry.profile?.title || "",
+    profileCategory: entry.profile?.category || "",
+    matchScore: Number.isFinite(Number(entry.matchScore)) ? Number(entry.matchScore) : null,
+    recommendation: entry.recommendation || "",
+    progress: {
+      finished: 1,
+      total: 1
+    },
+    error: "",
+    errorType: ""
   };
 }
 

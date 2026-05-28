@@ -5,6 +5,7 @@ const SETTINGS_KEY = "resumeCopilot.settings";
 const JOB_PROFILES_KEY = "resumeCopilot.jobProfiles";
 const ANALYSIS_HISTORY_KEY = "resumeCopilot.analysisHistory";
 const ANALYSIS_TASKS_KEY = "resumeCopilot.analysisTasks";
+const BACKUP_SCHEMA_VERSION = 1;
 const MAX_ANALYSIS_HISTORY = 50;
 const MAX_ANALYSIS_TASKS = 40;
 
@@ -126,6 +127,80 @@ export async function saveAnalysisTasks(tasks) {
   return nextTasks;
 }
 
+export async function exportResumeCopilotData() {
+  const [settings, jobProfiles, analysisHistory, analysisTasks] = await Promise.all([
+    getSettings(),
+    listJobProfiles(),
+    listAnalysisHistory(),
+    listAnalysisTasks()
+  ]);
+
+  return {
+    app: "Resume Copilot",
+    schemaVersion: BACKUP_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    data: {
+      settings,
+      jobProfiles,
+      analysisHistory,
+      analysisTasks
+    }
+  };
+}
+
+export async function importResumeCopilotData(backup) {
+  const data = normalizeBackupData(backup);
+
+  const sourceSettings = data.settings && typeof data.settings === "object" ? data.settings : {};
+  const settings = {
+    ...DEFAULT_SETTINGS,
+    ...sourceSettings
+  };
+  const jobProfiles = ensureArray(data.jobProfiles)
+    .filter((profile) => profile && typeof profile === "object" && (profile.id || profile.title || profile.jd))
+    .map((profile) => normalizeJobProfile(profile))
+    .filter(Boolean);
+  const analysisHistory = ensureArray(data.analysisHistory)
+    .map(normalizeAnalysisHistoryEntry)
+    .filter(Boolean)
+    .slice(0, MAX_ANALYSIS_HISTORY);
+  const analysisTasks = ensureArray(data.analysisTasks)
+    .map(normalizeAnalysisTask)
+    .filter(Boolean)
+    .slice(0, MAX_ANALYSIS_TASKS);
+
+  await chrome.storage.local.set({
+    [SETTINGS_KEY]: {
+      ...DEFAULT_SETTINGS,
+      apiKey: String(settings.apiKey || "").trim(),
+      model: String(settings.model || DEFAULT_SETTINGS.model).trim()
+    },
+    [JOB_PROFILES_KEY]: jobProfiles,
+    [ANALYSIS_HISTORY_KEY]: analysisHistory,
+    [ANALYSIS_TASKS_KEY]: analysisTasks
+  });
+
+  return {
+    settings,
+    jobProfiles,
+    analysisHistory,
+    analysisTasks
+  };
+}
+
+function normalizeBackupData(backup) {
+  if (!backup || typeof backup !== "object") {
+    throw new Error("备份文件格式不正确");
+  }
+
+  const data = backup.data && typeof backup.data === "object" ? backup.data : backup;
+  if (!data.settings && !data.jobProfiles && !data.analysisHistory && !data.analysisTasks) {
+    throw new Error("没有找到可导入的 Resume Copilot 配置");
+  }
+
+  return data;
+}
+
 function normalizeAnalysisHistoryEntry(entry) {
   if (!entry || typeof entry !== "object") return null;
 
@@ -134,6 +209,7 @@ function normalizeAnalysisHistoryEntry(entry) {
   return {
     id: compactText(entry.id || entry.taskId) || createId(),
     taskId: compactText(entry.taskId || ""),
+    resumeFingerprint: compactText(entry.resumeFingerprint || ""),
     createdAt: compactText(entry.createdAt) || new Date().toISOString(),
     source: compactText(entry.source || "未知来源"),
     candidateName: isCandidateNameRecognized(candidateName) ? candidateName : "姓名未识别",
@@ -156,6 +232,7 @@ function normalizeAnalysisTask(task) {
   if (!task || typeof task !== "object") return null;
   return {
     id: compactText(task.id) || createId(),
+    resumeFingerprint: compactText(task.resumeFingerprint || ""),
     mode: task.mode === "auto" ? "auto" : "single",
     status: ["queued", "running", "done", "error"].includes(task.status) ? task.status : "queued",
     createdAt: compactText(task.createdAt) || new Date().toISOString(),

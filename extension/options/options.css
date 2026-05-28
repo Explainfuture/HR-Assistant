@@ -72,6 +72,10 @@ body {
   gap: 14px;
 }
 
+.backup-actions {
+  align-items: flex-start;
+}
+
 textarea {
   min-height: 120px;
 }

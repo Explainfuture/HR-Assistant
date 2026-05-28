@@ -5,9 +5,47 @@ body {
   overscroll-behavior: contain;
 }
 
-.panel {
+.panel-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
   min-width: 340px;
   padding: 18px 16px 28px;
+}
+
+.panel {
+  min-width: 0;
+}
+
+.candidate-sidebar {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-width: 0;
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+
+.sidebar-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sidebar-title h2 {
+  font-size: 16px;
+}
+
+.sidebar-title p {
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .panel-header {
@@ -98,13 +136,27 @@ body {
 }
 
 .task-item,
-.history-item {
+.history-item,
+.candidate-item {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-subtle);
   padding: 11px;
   text-align: left;
+}
+
+.candidate-item {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  min-height: 82px;
+}
+
+.candidate-item:hover,
+.candidate-item[aria-pressed="true"] {
+  border-color: #93c5fd;
+  background: var(--primary-soft);
 }
 
 .task-item.running {
@@ -123,7 +175,8 @@ body {
 }
 
 .task-title,
-.history-title {
+.history-title,
+.candidate-name-row {
   display: flex;
   justify-content: space-between;
   gap: 10px;
@@ -134,7 +187,8 @@ body {
 }
 
 .task-status,
-.history-score {
+.history-score,
+.candidate-score {
   flex-shrink: 0;
   color: var(--primary);
   font-size: 12px;
@@ -142,10 +196,24 @@ body {
   white-space: nowrap;
 }
 
+.candidate-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.candidate-score {
+  font-size: 18px;
+  font-weight: 850;
+}
+
 .task-meta,
 .task-error,
 .history-meta,
-.history-summary {
+.history-summary,
+.candidate-meta,
+.candidate-recommendation {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
@@ -157,9 +225,38 @@ body {
   color: var(--danger);
 }
 
+.selected-history-header {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+
+.selected-history-header h2 {
+  font-size: 17px;
+}
+
+@media (min-width: 760px) {
+  .panel-shell {
+    grid-template-columns: minmax(230px, 300px) minmax(420px, 1fr);
+    align-items: start;
+  }
+
+  .candidate-sidebar {
+    position: sticky;
+    top: 12px;
+    max-height: calc(100vh - 36px);
+  }
+}
+
 @media (max-width: 380px) {
-  .panel {
+  .panel-shell {
     min-width: 320px;
     padding: 16px 14px 26px;
+  }
+
+  .panel {
+    min-width: 320px;
   }
 }
