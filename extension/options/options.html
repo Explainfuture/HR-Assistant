@@ -9,131 +9,168 @@
   </head>
   <body>
     <a class="skip-link" href="#settings">跳到设置</a>
-    <main class="page">
-      <header class="page-header">
-        <div>
-          <h1>Resume Copilot</h1>
-          <p>配置 Doubao，并维护用于 BOSS 简历分析的岗位知识库。</p>
+
+    <main class="settings-app">
+      <header class="top-app-bar">
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true">RC</div>
+          <div class="top-title">
+            <h1>Resume Copilot</h1>
+            <p>配置 Doubao，并维护用于简历分析的岗位知识库。</p>
+          </div>
         </div>
         <div class="header-actions">
-          <span class="badge">BOSS MVP</span>
-          <button id="closeOptionsButton" class="button-secondary" type="button">关闭</button>
+          <button id="closeOptionsButton" class="button-secondary button-compact" type="button">关闭</button>
         </div>
       </header>
 
-      <section id="settings" class="section">
-        <div class="section-title">
-          <h2>API 设置</h2>
-          <p>API Key 保存在本机插件存储中，适合个人原型。</p>
-        </div>
-        <div class="field-grid">
-          <label>
-            <span>Doubao API Key</span>
-            <input
-              id="apiKeyInput"
-              name="doubao-api-key"
-              type="password"
-              autocomplete="off"
-              spellcheck="false"
-              placeholder="sk-…"
-            />
-          </label>
-          <label>
-            <span>模型</span>
-            <input
-              id="modelInput"
-              name="doubao-model"
-              type="text"
-              autocomplete="off"
-              spellcheck="false"
-              value="doubao-seed-2-0-mini-260428"
-            />
-          </label>
-        </div>
-        <div class="actions">
-          <button id="saveSettingsButton" type="button">保存 API 设置</button>
-          <span id="settingsStatus" class="status" role="status" aria-live="polite"></span>
-        </div>
-      </section>
+      <div class="settings-layout">
+        <nav class="settings-nav" aria-label="设置导航">
+          <div class="nav-heading">
+            <h2>Settings</h2>
+            <p>HR Copilot Configuration</p>
+          </div>
+          <a class="nav-item active" href="#settings">
+            <span aria-hidden="true">API</span>
+            API 设置
+          </a>
+          <a class="nav-item" href="#backup">
+            <span aria-hidden="true">BK</span>
+            配置备份
+          </a>
+          <a class="nav-item" href="#jobProfiles">
+            <span aria-hidden="true">JD</span>
+            岗位知识库
+          </a>
+        </nav>
 
-      <section class="section">
-        <div class="section-title">
-          <h2>配置备份</h2>
-          <p>导出会包含 API Key、岗位知识库、解析历史和任务摘要；请只分享给可信的人。</p>
-        </div>
-        <div class="actions backup-actions">
-          <button id="exportBackupButton" class="button-secondary" type="button">导出全部配置</button>
-          <button id="importBackupButton" class="button-secondary" type="button">导入全部配置</button>
-          <input id="backupFileInput" type="file" accept="application/json,.json" hidden />
-          <span id="backupStatus" class="status" role="status" aria-live="polite"></span>
-        </div>
-      </section>
+        <section class="settings-content" aria-label="设置内容">
+          <section id="settings" class="settings-card">
+            <div class="section-title">
+              <h2>API 设置</h2>
+              <p>API Key 保存在本机插件存储中，适合个人原型。</p>
+            </div>
+            <div class="field-grid">
+              <label>
+                <span>Doubao API Key</span>
+                <input
+                  id="apiKeyInput"
+                  name="doubao-api-key"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="sk-..."
+                />
+              </label>
+              <label>
+                <span>模型</span>
+                <input
+                  id="modelInput"
+                  name="doubao-model"
+                  type="text"
+                  autocomplete="off"
+                  spellcheck="false"
+                  value="doubao-seed-2-0-mini-260428"
+                />
+              </label>
+            </div>
+            <div class="actions">
+              <button id="saveSettingsButton" type="button">保存 API 设置</button>
+              <span id="settingsStatus" class="status" role="status" aria-live="polite"></span>
+            </div>
+          </section>
 
-      <section class="section two-column">
-        <div class="composer">
-          <div class="section-title">
-            <h2>生成岗位 JSON</h2>
-            <p>粘贴 JD 后让 Doubao 结构化，生成后可继续手动编辑。</p>
-          </div>
-          <label>
-            <span>JD 文本</span>
-            <textarea
-              id="jdInput"
-              name="job-description"
-              rows="11"
-              autocomplete="off"
-              placeholder="粘贴岗位 JD…"
-            ></textarea>
-          </label>
-          <label>
-            <span>内部定制需求</span>
-            <textarea
-              id="internalRequirementsInput"
-              name="internal-requirements"
-              rows="6"
-              autocomplete="off"
-              placeholder="填写比 JD 优先级更高的筛选要求，例如年龄、学历、行业、项目背景或必须排除的情况…"
-            ></textarea>
-          </label>
-          <div class="actions">
-            <button id="generateProfileButton" type="button">生成岗位 JSON</button>
-            <button id="clearEditorButton" class="button-secondary" type="button">清空编辑区</button>
-            <span id="generateStatus" class="status" role="status" aria-live="polite"></span>
-          </div>
-        </div>
+          <section id="backup" class="settings-card">
+            <div class="section-title">
+              <h2>配置备份</h2>
+              <p>导出包含 API Key、岗位知识库、解析历史和任务摘要；请妥善保管导出文件。</p>
+            </div>
+            <div class="actions backup-actions">
+              <button id="exportBackupButton" class="button-secondary" type="button">导出全部配置</button>
+              <button id="importBackupButton" class="button-secondary" type="button">导入全部配置</button>
+              <input id="backupFileInput" type="file" accept="application/json,.json" hidden />
+              <span id="backupStatus" class="status" role="status" aria-live="polite"></span>
+            </div>
+          </section>
 
-        <div class="editor">
-          <div class="section-title">
-            <h2>岗位知识库</h2>
-            <p>JSON 校验通过后保存到本地。</p>
-          </div>
-          <label>
-            <span>已保存岗位</span>
-            <select id="profileSelect" name="saved-job-profile"></select>
-          </label>
-          <label>
-            <span>岗位大类</span>
-            <select id="categorySelect" name="job-profile-category"></select>
-          </label>
-          <label>
-            <span>岗位 JSON</span>
-            <textarea
-              id="jsonEditor"
-              class="json-editor"
-              name="job-profile-json"
-              rows="18"
-              autocomplete="off"
-              spellcheck="false"
-            ></textarea>
-          </label>
-          <div class="actions">
-            <button id="saveProfileButton" type="button">保存岗位</button>
-            <button id="formatProfileButton" class="button-secondary" type="button">格式化</button>
-            <button id="deleteProfileButton" class="button-danger" type="button">删除</button>
-            <span id="profileStatus" class="status" role="status" aria-live="polite"></span>
-          </div>
-        </div>
-      </section>
+          <section id="jobProfiles" class="settings-card knowledge-card">
+            <div class="section-title split-title">
+              <div>
+                <h2>岗位知识库</h2>
+                <p>JD 文本转 JSON 结构化模型，校验通过后保存到本地。</p>
+              </div>
+            </div>
+
+            <div class="knowledge-grid">
+              <section class="composer" aria-labelledby="composerTitle">
+                <div class="subsection-title">
+                  <h3 id="composerTitle">生成岗位 JSON</h3>
+                  <p>粘贴 JD 后让 Doubao 结构化，生成后可继续手动编辑。</p>
+                </div>
+                <label class="fill-field">
+                  <span>JD 文本</span>
+                  <textarea
+                    id="jdInput"
+                    name="job-description"
+                    rows="11"
+                    autocomplete="off"
+                    placeholder="粘贴岗位 JD..."
+                  ></textarea>
+                </label>
+                <label>
+                  <span>内部定制需求</span>
+                  <textarea
+                    id="internalRequirementsInput"
+                    name="internal-requirements"
+                    rows="6"
+                    autocomplete="off"
+                    placeholder="填写比 JD 优先级更高的筛选要求，例如年龄、学历、行业、项目背景或必须排除的情况..."
+                  ></textarea>
+                </label>
+                <div class="actions">
+                  <button id="generateProfileButton" type="button">生成岗位 JSON</button>
+                  <button id="clearEditorButton" class="button-secondary" type="button">清空编辑区</button>
+                  <span id="generateStatus" class="status" role="status" aria-live="polite"></span>
+                </div>
+              </section>
+
+              <section class="editor" aria-labelledby="editorTitle">
+                <div class="subsection-title">
+                  <h3 id="editorTitle">岗位知识库管理</h3>
+                  <p>选择已保存岗位，或编辑 JSON 后保存为新的岗位配置。</p>
+                </div>
+                <div class="stacked-fields">
+                  <label>
+                    <span>已保存岗位</span>
+                    <select id="profileSelect" name="saved-job-profile"></select>
+                  </label>
+                  <label>
+                    <span>岗位大类</span>
+                    <select id="categorySelect" name="job-profile-category"></select>
+                  </label>
+                </div>
+                <label class="fill-field">
+                  <span>岗位 JSON</span>
+                  <textarea
+                    id="jsonEditor"
+                    class="json-editor"
+                    name="job-profile-json"
+                    rows="18"
+                    autocomplete="off"
+                    spellcheck="false"
+                  ></textarea>
+                </label>
+                <div class="actions profile-actions">
+                  <button id="saveProfileButton" type="button">保存岗位</button>
+                  <button id="formatProfileButton" class="button-secondary" type="button">格式化</button>
+                  <button id="deleteProfileButton" class="button-danger" type="button">删除</button>
+                  <span id="profileStatus" class="status" role="status" aria-live="polite"></span>
+                </div>
+              </section>
+            </div>
+          </section>
+        </section>
+      </div>
     </main>
 
     <script type="module" src="options.js"></script>

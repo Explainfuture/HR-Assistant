@@ -65,7 +65,7 @@ assert.equal(historySource.includes("isDeleteSelectionMode"), true, "History sho
 assert.equal(historySource.includes("???"), false, "History delete UI should not contain placeholder question marks");
 const reportRendererSource = readFileSync(join(root, "extension/shared/reportRenderer.js"), "utf8");
 assert.equal(reportRendererSource.includes("score-evidence"), true, "Analysis report should render resume evidence");
-assert.equal(reportRendererSource.includes("confidence:"), true, "Analysis report should render evidence confidence");
+assert.equal(reportRendererSource.includes("判断依据："), true, "Analysis report should render confidence in Chinese");
 const storageSource = readFileSync(join(root, "extension/shared/storage.js"), "utf8");
 assert.equal(storageSource.includes("entry.id || entry.taskId"), true, "History entries should use taskId as a stable id fallback");
 assert.equal(storageSource.includes("!targetIds.has(entry.taskId)"), true, "Batch deletion should match old history entries by taskId");

@@ -48,6 +48,9 @@ let taskPollTimer = 0;
 let autoCaptureTimer = 0;
 let autoCaptureInFlight = false;
 let lastAutoFingerprint = "";
+let lastTaskSignature = "";
+let lastHistorySignature = "";
+let lastRenderedReportSignature = "";
 
 init();
 
@@ -157,9 +160,10 @@ async function refreshLocalState({ silent = false } = {}) {
     profileSelect.value = selectedProfileId;
   }
   syncSelectedHistoryEntry();
+  lastHistorySignature = createHistorySignature(historyEntries);
   renderHistoryButton();
   renderHistoryList();
-  renderSelectedHistoryReport();
+  renderSelectedHistoryReport({ force: true });
 
   if (!settings.apiKey) {
     setStatus("请先打开设置填写 Doubao API Key");
@@ -297,15 +301,35 @@ async function refreshTasks() {
   });
   if (!response?.ok) return;
 
-  renderTasks(response.tasks || []);
+  const tasks = response.tasks || [];
+  const taskSignature = createTaskSignature(tasks);
+  const tasksChanged = taskSignature !== lastTaskSignature;
 
-  if ((response.tasks || []).some((task) => task.status === "done")) {
-    historyEntries = await listAnalysisHistory();
-    syncSelectedHistoryEntry();
-    renderHistoryButton();
-    renderHistoryList();
-    renderSelectedHistoryReport();
+  if (tasksChanged) {
+    lastTaskSignature = taskSignature;
+    renderTasks(tasks);
   }
+
+  if (tasksChanged && tasks.some((task) => task.status === "done")) {
+    await refreshHistoryFromStorage();
+  }
+}
+
+async function refreshHistoryFromStorage({ force = false } = {}) {
+  const nextHistory = await listAnalysisHistory();
+  const nextHistorySignature = createHistorySignature(nextHistory);
+  const previousSelectedId = selectedHistoryEntry?.id || "";
+
+  historyEntries = nextHistory;
+  syncSelectedHistoryEntry();
+
+  const selectedChanged = previousSelectedId !== (selectedHistoryEntry?.id || "");
+  if (!force && !selectedChanged && nextHistorySignature === lastHistorySignature) return;
+
+  lastHistorySignature = nextHistorySignature;
+  renderHistoryButton();
+  renderHistoryList();
+  renderSelectedHistoryReport({ force: selectedChanged });
 }
 
 function startTaskPolling() {
@@ -555,7 +579,11 @@ function getSourceLabelForUrl(url) {
   return "网页简历";
 }
 
-function renderSelectedHistoryReport() {
+function renderSelectedHistoryReport({ force = false } = {}) {
+  const reportSignature = selectedHistoryEntry ? createReportSignature(selectedHistoryEntry) : "empty";
+  if (!force && reportSignature === lastRenderedReportSignature) return;
+
+  lastRenderedReportSignature = reportSignature;
   reportRoot.innerHTML = "";
   if (!selectedHistoryEntry) {
     reportRoot.hidden = true;
@@ -584,6 +612,52 @@ function renderSelectedHistoryReport() {
     );
   });
   markEntered(reportRoot);
+}
+
+function createTaskSignature(tasks) {
+  return JSON.stringify(
+    tasks.map((task) => ({
+      id: task.id,
+      status: task.status,
+      updatedAt: task.updatedAt,
+      candidateName: task.candidateName,
+      matchScore: task.matchScore,
+      recommendation: task.recommendation,
+      error: task.error,
+      errorType: task.errorType,
+      progress: task.progress
+    }))
+  );
+}
+
+function createHistorySignature(entries) {
+  return JSON.stringify(
+    entries.map((entry) => ({
+      id: entry.id,
+      taskId: entry.taskId,
+      candidateName: entry.candidateName,
+      createdAt: entry.createdAt,
+      source: entry.source,
+      profile: entry.profile,
+      matchScore: entry.matchScore,
+      recommendation: entry.recommendation,
+      copyableConclusion: entry.copyableConclusion
+    }))
+  );
+}
+
+function createReportSignature(entry) {
+  return JSON.stringify({
+    id: entry.id,
+    candidateName: entry.candidateName,
+    createdAt: entry.createdAt,
+    profile: entry.profile,
+    matchScore: entry.matchScore,
+    recommendation: entry.recommendation,
+    copyableConclusion: entry.copyableConclusion,
+    analysis: entry.analysis,
+    batchResults: entry.batchResults
+  });
 }
 
 function renderHistoryDetailHeader(entry) {

@@ -8,23 +8,69 @@
     <link rel="stylesheet" href="sidepanel.css" />
   </head>
   <body>
-    <main class="panel-shell">
-      <aside class="candidate-sidebar" aria-labelledby="candidateListTitle">
-        <div class="sidebar-title">
-          <div>
-            <h2 id="candidateListTitle">候选人</h2>
-            <p id="historySummary">打开候选人简历后会自动进入这里</p>
-          </div>
-          <span id="candidateCount" class="count-badge">0</span>
+    <main class="sidepanel-app">
+      <aside class="settings-sidebar" aria-labelledby="settingsTitle">
+        <header class="settings-header">
+          <h2 id="settingsTitle">评估设置</h2>
+          <p>岗位、来源和提交方式</p>
+        </header>
+
+        <div class="settings-scroll">
+          <section class="settings-block">
+            <label>
+              <span>岗位大类</span>
+              <select id="categorySelect" name="selected-job-category"></select>
+            </label>
+
+            <label>
+              <span>指定评估岗位</span>
+              <select id="profileSelect" name="selected-job-profile"></select>
+            </label>
+          </section>
+
+          <section class="settings-block source-group">
+            <div class="source-title">
+              <h3>当前网页简历</h3>
+              <p>支持 BOSS 和 Moka。打开候选人详情后可自动提交，也可手动提交当前页面。</p>
+            </div>
+            <button id="autoMatchBossButton" type="button">自动判断岗位</button>
+            <button id="analyzeBossButton" class="button-secondary" type="button">
+              按指定岗位评估
+            </button>
+          </section>
+
+          <section class="settings-block source-group">
+            <div class="source-title">
+              <h3>PDF 简历文件</h3>
+              <p>上传附件简历后提交后台解析，扫描件会渲染为图片交给 Doubao OCR。</p>
+            </div>
+            <label class="file-picker">
+              <span>选择 PDF 文件</span>
+              <input id="pdfInput" name="resume-pdf" type="file" accept="application/pdf,.pdf" />
+            </label>
+            <button id="autoMatchPdfButton" type="button">解析并自动判断岗位</button>
+            <button id="analyzePdfButton" class="button-secondary" type="button">
+              按指定岗位评估
+            </button>
+          </section>
+
+          <section class="settings-block source-group">
+            <button id="reanalyzeLastButton" class="button-secondary reanalyze-button" type="button" disabled>
+              复用上次简历再评估
+            </button>
+            <p id="statusText" class="status" role="status" aria-live="polite"></p>
+          </section>
         </div>
-        <div id="historyList" class="history-list"></div>
       </aside>
 
-      <section class="panel">
+      <section class="app-main panel">
         <header class="panel-header">
-          <div>
-            <h1>Resume Copilot</h1>
-            <p>候选人后台解析队列</p>
+          <div class="brand-block">
+            <div class="brand-mark" aria-hidden="true">RC</div>
+            <div>
+              <h1>Resume Copilot</h1>
+              <p>候选人后台解析队列</p>
+            </div>
           </div>
           <div class="header-actions">
             <button id="refreshButton" class="button-secondary button-compact" type="button">刷新</button>
@@ -41,63 +87,32 @@
           </div>
         </header>
 
-        <section class="control-block">
-          <label>
-            <span>岗位大类</span>
-            <select id="categorySelect" name="selected-job-category"></select>
-          </label>
-
-          <label>
-            <span>指定评估岗位</span>
-            <select id="profileSelect" name="selected-job-profile"></select>
-          </label>
-
-          <div class="source-group">
-            <div class="source-title">
-              <h2>当前网页简历</h2>
-              <p>支持 BOSS 和 Moka。打开候选人详情后会自动提交，也可手动提交当前页面。</p>
+        <div class="workspace">
+          <aside class="candidate-sidebar" aria-labelledby="candidateListTitle">
+            <div class="sidebar-title">
+              <div>
+                <h2 id="candidateListTitle">候选人历史</h2>
+                <p id="historySummary">打开候选人简历后会自动进入这里</p>
+              </div>
+              <span id="candidateCount" class="count-badge">0</span>
             </div>
-            <button id="autoMatchBossButton" type="button">自动判断适合哪个岗位</button>
-            <button id="analyzeBossButton" class="button-secondary" type="button">
-              按上方指定岗位评估
-            </button>
-          </div>
+            <div id="historyList" class="history-list"></div>
+          </aside>
 
-          <div class="divider"><span>或</span></div>
+          <section class="analysis-pane">
+            <section id="captureBlock" class="capture-block" hidden>
+              <h2>最近提交</h2>
+              <p id="captureSummary"></p>
+            </section>
 
-          <div class="source-group">
-            <div class="source-title">
-              <h2>PDF 简历文件</h2>
-              <p>上传附件简历后提交到后台解析，扫描件会渲染为图片交给 Doubao OCR。</p>
-            </div>
-            <label>
-              <span>选择 PDF</span>
-              <input id="pdfInput" name="resume-pdf" type="file" accept="application/pdf,.pdf" />
-            </label>
-            <button id="autoMatchPdfButton" type="button">自动判断适合哪个岗位</button>
-            <button id="analyzePdfButton" class="button-secondary" type="button">
-              按上方指定岗位评估
-            </button>
-          </div>
+            <section class="task-block" aria-labelledby="taskTitle">
+              <h2 id="taskTitle">后台任务</h2>
+              <div id="taskList" class="task-list"></div>
+            </section>
 
-          <button id="reanalyzeLastButton" class="button-secondary" type="button" disabled>
-            复用上次简历，按指定岗位再评估
-          </button>
-
-          <p id="statusText" class="status" role="status" aria-live="polite"></p>
-        </section>
-
-        <section id="captureBlock" class="capture-block" hidden>
-          <h2>最近提交</h2>
-          <p id="captureSummary"></p>
-        </section>
-
-        <section class="task-block" aria-labelledby="taskTitle">
-          <h2 id="taskTitle">后台任务</h2>
-          <div id="taskList" class="task-list"></div>
-        </section>
-
-        <section id="reportRoot" class="report" hidden></section>
+            <section id="reportRoot" class="report" hidden></section>
+          </section>
+        </div>
       </section>
     </main>
 

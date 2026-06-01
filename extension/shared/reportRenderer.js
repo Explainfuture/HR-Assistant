@@ -114,7 +114,7 @@ function scoreBreakdownBlock(scoreBreakdown) {
     const value = document.createElement("span");
     value.textContent = [
       `${Number.isFinite(score) ? score : 0}/${maxScore}`,
-      item.confidence ? `confidence: ${item.confidence}` : ""
+      confidenceText(item.confidence)
     ].filter(Boolean).join(" · ");
 
     header.append(label, value);
@@ -139,6 +139,13 @@ function scoreBreakdownBlock(scoreBreakdown) {
   node.className = "score-breakdown";
   node.append(...rows);
   return node;
+}
+
+function confidenceText(value) {
+  if (value === "high") return "判断依据：充分";
+  if (value === "medium") return "判断依据：一般";
+  if (value === "low") return "判断依据：较弱";
+  return "";
 }
 
 function evidenceList(evidence) {
