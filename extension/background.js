@@ -14,13 +14,15 @@ import {
   listAnalysisHistory,
   listAnalysisTasks,
   saveAnalysisTasks,
-  saveAnalysisHistoryEntry
+  saveAnalysisHistoryEntry,
+  updateAnalysisHistoryEntry
 } from "./shared/storage.js";
 import { createId } from "./shared/jsonUtils.js";
 import { ERROR_TYPES, normalizeTaskError } from "./shared/errorUtils.js";
 import { createResumeFingerprint } from "./shared/resumeFingerprint.js";
+import { getMokaApplicationId, getMokaDetailUrl } from "./shared/pagePolicy.js";
 
-const TASK_CONCURRENCY = 2;
+const TASK_CONCURRENCY = 10;
 const MAX_TASKS = 40;
 const tasks = [];
 let runningCount = 0;
@@ -56,8 +58,52 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "RESUME_COPILOT_OPEN_MOKA_CANDIDATE") {
+    openMokaCandidatePage(message.payload)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({ ok: false, error: error.message || String(error) }));
+    return true;
+  }
+
   return false;
 });
+
+const MOKA_TAB_URL_PATTERNS = [
+  "https://mokahr.com/*",
+  "https://*.mokahr.com/*",
+  "https://*.mokahr.com.cn/*"
+];
+
+async function openMokaCandidatePage(payload = {}) {
+  const targetUrl = getMokaDetailUrl(payload?.url);
+  if (!targetUrl) throw new Error("Moka candidate URL is unavailable");
+
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const mokaTabs = await chrome.tabs.query({ url: MOKA_TAB_URL_PATTERNS });
+  const targetTab = selectMokaTabForNavigation(mokaTabs, activeTab);
+
+  if (targetTab?.id) {
+    const tab = await chrome.tabs.update(targetTab.id, { url: targetUrl, active: true });
+    return { tabId: tab?.id || targetTab.id, url: targetUrl };
+  }
+
+  const tab = await chrome.tabs.create({ url: targetUrl });
+  return { tabId: tab?.id || 0, url: targetUrl };
+}
+
+function selectMokaTabForNavigation(mokaTabs, activeTab) {
+  if (!Array.isArray(mokaTabs) || !mokaTabs.length) return null;
+  if (activeTab?.id) {
+    const activeMokaTab = mokaTabs.find((tab) => tab.id === activeTab.id);
+    if (activeMokaTab) return activeMokaTab;
+  }
+
+  const activeWindowId = activeTab?.windowId;
+  return mokaTabs.find((tab) => tab.windowId === activeWindowId && tab.active) ||
+    mokaTabs.find((tab) => tab.windowId === activeWindowId) ||
+    mokaTabs[0] ||
+    null;
+}
 
 async function submitTask(payload) {
   const resumeText = String(payload?.resume?.text || "").trim();
@@ -69,11 +115,13 @@ async function submitTask(payload) {
   }
 
   const rawCandidateName = payload?.resume?.candidateName || payload?.resume?.fallbackName || "";
-  const candidateName = inferCandidateName(
-    resumeText,
-    rawCandidateName
-  );
   const source = payload?.resume?.source || "未知来源";
+  const candidateName = /moka/i.test(source) && isCandidateNameRecognized(rawCandidateName)
+    ? rawCandidateName
+    : inferCandidateName(
+        resumeText,
+        rawCandidateName
+      );
   if (/moka/i.test(source) && !payload?.resume?.pageKey) {
     throw new Error("请打开 Moka 候选人详情页后再解析");
   }
@@ -88,7 +136,10 @@ async function submitTask(payload) {
 
   if (payload?.dedupe !== false && resumeFingerprint) {
     const duplicate = await findDuplicateAnalysis(resumeFingerprint);
-    if (duplicate) return duplicate;
+    if (duplicate) {
+      await updateDuplicateAnalysisMetadata(duplicate, payload?.resume);
+      return duplicate;
+    }
   }
 
   const task = {
@@ -101,6 +152,12 @@ async function submitTask(payload) {
     candidateName,
     source,
     resume: {
+      pageKey: payload?.resume?.pageKey || "",
+      pageUrl: payload?.resume?.pageUrl || "",
+      mokaApplicationId: payload?.resume?.mokaApplicationId || getMokaApplicationId(payload?.resume?.mokaDetailUrl || payload?.resume?.pageUrl),
+      mokaDetailUrl: payload?.resume?.mokaDetailUrl || getMokaDetailUrl(payload?.resume?.pageUrl),
+      mokaPositionRaw: payload?.resume?.mokaPositionRaw || "",
+      mokaPositionTitle: payload?.resume?.mokaPositionTitle || "",
       text: resumeText,
       imageUrls: resumeImageUrls,
       captureDebug: normalizeCaptureDebug(payload?.resume?.debug),
@@ -126,12 +183,35 @@ async function submitTask(payload) {
   return serializeTask(task);
 }
 
+async function updateDuplicateAnalysisMetadata(duplicate, resume) {
+  if (duplicate?.duplicateSource !== "history") return;
+  const id = duplicate.id || duplicate.taskId;
+  if (!id || !resume || typeof resume !== "object") return;
+
+  const pageUrl = String(resume.pageUrl || "").trim();
+  const mokaDetailUrl = String(resume.mokaDetailUrl || getMokaDetailUrl(pageUrl)).trim();
+  const patch = {
+    pageKey: String(resume.pageKey || "").trim(),
+    pageUrl,
+    mokaApplicationId: String(resume.mokaApplicationId || getMokaApplicationId(mokaDetailUrl || pageUrl)).trim(),
+    mokaDetailUrl,
+    mokaPositionRaw: String(resume.mokaPositionRaw || "").trim(),
+    mokaPositionTitle: String(resume.mokaPositionTitle || "").trim()
+  };
+
+  const hasPatch = Object.values(patch).some(Boolean);
+  if (!hasPatch) return;
+  await updateAnalysisHistoryEntry(id, patch);
+}
+
 function normalizeCaptureDebug(debug) {
   if (!debug || typeof debug !== "object") return null;
   const mokaIdentity = debug.mokaIdentity && typeof debug.mokaIdentity === "object"
     ? {
         name: String(debug.mokaIdentity.name || "").slice(0, 40),
-        text: String(debug.mokaIdentity.text || "").slice(0, 300)
+        text: String(debug.mokaIdentity.text || "").slice(0, 300),
+        positionRaw: String(debug.mokaIdentity.positionRaw || "").slice(0, 120),
+        positionTitle: String(debug.mokaIdentity.positionTitle || "").slice(0, 40)
       }
     : null;
   return {
@@ -153,7 +233,7 @@ async function generateOfferApplication(payload = {}) {
   const settings = await getSettings();
   if (!settings.apiKey) throw new Error("请先在 Options 页面配置 Doubao API Key");
 
-  return generateOfferApplicationFields({
+  const fields = await generateOfferApplicationFields({
     apiKey: settings.apiKey,
     model: settings.model,
     candidateName: payload.candidateName || "",
@@ -162,6 +242,9 @@ async function generateOfferApplication(payload = {}) {
     resumeText: payload.resumeText || "",
     headhunterReport: payload.headhunterReport || ""
   });
+  return payload.mokaPositionTitle
+    ? { ...fields, positioning: payload.mokaPositionTitle }
+    : fields;
 }
 
 function scheduleQueue() {
@@ -306,13 +389,20 @@ async function completeTask(task, profile, analysis, batchResults, settings) {
     candidateName,
     profile,
     analysis,
-    resumeText: analysis?.resumeExtractedText || task.resume.text
+    resumeText: analysis?.resumeExtractedText || task.resume.text,
+    mokaPositionTitle: task.resume.mokaPositionTitle || ""
   });
 
   await saveAnalysisHistoryEntry({
     taskId: task.id,
     resumeFingerprint: task.resumeFingerprint,
     source: task.source,
+    pageKey: task.resume.pageKey || "",
+    pageUrl: task.resume.pageUrl || "",
+    mokaApplicationId: task.resume.mokaApplicationId || "",
+    mokaDetailUrl: task.resume.mokaDetailUrl || "",
+    mokaPositionRaw: task.resume.mokaPositionRaw || "",
+    mokaPositionTitle: task.resume.mokaPositionTitle || "",
     candidateName,
     resumeSummary: task.resume.summary,
     resumePreview: task.resume.preview,
@@ -338,7 +428,7 @@ function shouldLockSubmittedCandidateName(task) {
   return /moka/i.test(task?.source || "") && isCandidateNameRecognized(task?.candidateName);
 }
 
-async function buildAutomaticOfferApplication({ settings, candidateName, profile, analysis, resumeText }) {
+async function buildAutomaticOfferApplication({ settings, candidateName, profile, analysis, resumeText, mokaPositionTitle = "" }) {
   const manualFields = {
     departureReason: "",
     otherOpportunities: "",
@@ -351,7 +441,7 @@ async function buildAutomaticOfferApplication({ settings, candidateName, profile
     genderAge: "",
     education: "",
     recentCompanyBackground: "",
-    positioning: profile?.title || "",
+    positioning: mokaPositionTitle || profile?.title || "",
     highlights: analysis?.experienceAnalysis?.oneLineProfile || analysis?.copyableConclusion || ""
   };
 
@@ -371,6 +461,7 @@ async function buildAutomaticOfferApplication({ settings, candidateName, profile
   } catch {
     // Keep the main resume analysis successful even if template generation is unavailable.
   }
+  generatedFields.positioning = mokaPositionTitle || generatedFields.positioning || profile?.title || "";
 
   const offerApplication = {
     headhunterReport: "",

@@ -27,7 +27,12 @@ import {
 import { ERROR_TYPES, classifyError } from "../extension/shared/errorUtils.js";
 import { shouldRenderPdfPageImages } from "../extension/shared/pdfPolicy.js";
 import { createResumeFingerprint } from "../extension/shared/resumeFingerprint.js";
-import { getResumePageKey, isSupportedResumePage } from "../extension/shared/pagePolicy.js";
+import {
+  getMokaApplicationId,
+  getMokaDetailUrl,
+  getResumePageKey,
+  isSupportedResumePage
+} from "../extension/shared/pagePolicy.js";
 
 const root = process.cwd();
 const manifestPath = join(root, "extension", "manifest.json");
@@ -39,6 +44,7 @@ assert.equal(manifest.manifest_version, 3, "manifest should use MV3");
 assert.equal(manifest.permissions.includes("storage"), true, "storage permission is required");
 assert.equal(manifest.permissions.includes("sidePanel"), true, "sidePanel permission is required");
 assert.equal(manifest.permissions.includes("tabs"), true, "tabs permission is required");
+assert.equal(manifest.permissions.includes("scripting"), true, "scripting permission is required for Moka header fallback extraction");
 assert.equal(
   manifest.host_permissions.includes("https://ark.cn-beijing.volces.com/*"),
   true,
@@ -97,6 +103,9 @@ assert.equal(sidepanelSource.includes("findResumeKeywordHits"), true, "Resume di
 assert.equal(sidepanelSource.includes("lastAutoPageKey"), true, "Auto capture should track the active Moka detail page key");
 assert.equal(sidepanelSource.includes("if (pageKey && pageKey === lastAutoPageKey) return"), false, "Auto capture should not skip Moka collection before lazy pdf-resume images load");
 assert.equal(sidepanelSource.includes("lastAutoFingerprint && pageKey && pageKey === lastAutoPageKey"), true, "Auto capture should skip repeated Moka pages only after a successful fingerprint");
+assert.equal(sidepanelSource.includes("autoCaptureRerunRequested"), true, "Auto capture should rerun after an in-flight capture when the user switches candidates");
+assert.equal(sidepanelSource.includes("AUTO_CAPTURE_TIMEOUT_MS"), true, "Auto capture should not stay locked forever if page extraction hangs");
+assert.equal(sidepanelSource.includes("运行 ${runningCount}，排队 ${queuedCount}"), true, "Queue status should show running and queued task counts");
 assert.equal(sidepanelSource.includes("等待简历图片加载"), true, "Auto capture should leave collecting state when Moka images are not ready");
 assert.equal(sidepanelSource.includes("正在采集当前简历图片"), true, "Auto capture should show progress before background task submission");
 assert.equal(sidepanelSource.includes("正在识别简历图片"), true, "Running tasks should show the OCR stage instead of a stuck 0/N counter");
@@ -120,6 +129,7 @@ assert.equal(storageSource.includes("ocrFinished"), true, "Persisted task progre
 assert.equal(storageSource.includes("exportResumeCopilotData"), true, "Storage should support full config export");
 assert.equal(storageSource.includes("importResumeCopilotData"), true, "Storage should support full config import");
 const backgroundSource = readFileSync(join(root, "extension/background.js"), "utf8");
+assert.equal(backgroundSource.includes("const TASK_CONCURRENCY = 10;"), true, "Background should run up to 10 candidate analyses concurrently");
 assert.equal(backgroundSource.includes("hydratePersistedTasks"), true, "Background should hydrate persisted tasks");
 assert.equal(backgroundSource.includes("TASK_INTERRUPTED"), true, "Background should mark interrupted tasks after recovery");
 assert.equal(backgroundSource.includes("findDuplicateAnalysis"), true, "Background should dedupe already parsed resumes");
@@ -132,8 +142,12 @@ assert.equal(backgroundSource.includes("ocrFinished"), true, "Background should 
 assert.equal(backgroundSource.includes("slice(0, 8)"), false, "Background should not truncate resume images");
 assert.equal(backgroundSource.includes("请打开 Moka 候选人详情页后再解析"), true, "Background should reject Moka list-page submissions");
 assert.equal(backgroundSource.includes("isResumeTagLikeCandidateName"), true, "Background should reject Moka tab labels as candidate names");
+assert.equal(backgroundSource.includes("/moka/i.test(source) && isCandidateNameRecognized(rawCandidateName)"), true, "Moka submissions should keep the header candidate name instead of re-inferring from page text");
 assert.equal(backgroundSource.includes("shouldLockSubmittedCandidateName"), true, "Moka page candidate names should not be overwritten by OCR");
 assert.equal(backgroundSource.includes("formatOfferGenderAge"), true, "Automatic offer content should format gender and age separately");
+assert.equal(backgroundSource.includes("RESUME_COPILOT_OPEN_MOKA_CANDIDATE"), true, "Background should open stored Moka candidate pages");
+assert.equal(backgroundSource.includes("mokaPositionTitle: task.resume.mokaPositionTitle"), true, "History should persist Moka header position");
+assert.equal(backgroundSource.includes("generatedFields.positioning = mokaPositionTitle"), true, "Offer positioning should prefer Moka header position");
 const extractorSource = readFileSync(join(root, "extension/content/bossResumeExtractor.js"), "utf8");
 assert.equal(extractorSource.includes("isMokaCandidateListPage"), true, "Content extractor should ignore Moka candidate list pages");
 assert.equal(extractorSource.includes("collectPdfResumeImageCandidates"), true, "Content extractor should prioritize Moka pdf-resume image pages");
@@ -143,6 +157,9 @@ assert.equal(extractorSource.includes("isMokaResumeImageUrl"), true, "Moka pdf-r
 assert.equal(extractorSource.includes("Moka 简历图片还未加载完成"), true, "Moka collection should not submit text-only stale captures");
 assert.equal(extractorSource.includes("extractMokaCandidateIdentity"), true, "Content extractor should collect Moka header identity");
 assert.equal(extractorSource.includes(".candidate-header-info"), true, "Moka name extraction should prioritize candidate-header-info");
+assert.equal(extractorSource.includes("candidate-header-info__item-pandect-current"), true, "Moka position extraction should read the header info item");
+assert.equal(extractorSource.includes("for (const headerRoot of document.querySelectorAll(\".candidate-header-info\"))"), true, "Moka position extraction should scan every visible header");
+assert.equal(extractorSource.includes("mokaPositionTitle"), true, "Content extractor should return Moka header position");
 assert.equal(extractorSource.includes("normalizeNameToken"), true, "Moka name extraction should strip header badges from name tokens");
 assert.equal(extractorSource.includes(".pdf-resume"), true, "Content extractor should target Moka pdf-resume containers");
 assert.equal(extractorSource.includes("pdfResumeImgTags"), true, "Content extractor should expose Moka pdf image tag diagnostics");
@@ -160,6 +177,12 @@ assert.equal(deepseekSource.includes("IMAGE_RESPONSE_TIMEOUT_MS"), true, "Image 
 assert.equal(deepseekSource.includes("OCR_REASONING_EFFORT"), true, "Image OCR should use a faster reasoning effort than job matching");
 assert.equal(deepseekSource.includes("OCR_PAGE_CONCURRENCY"), true, "Image OCR should process pages concurrently");
 assert.equal(deepseekSource.includes("recognizeResumeImagePage"), true, "Image OCR should split multi-page resumes into page-level requests");
+assert.equal(sidepanelSource.includes("mokaDetailUrl: getMokaDetailUrl(tab.url)"), true, "Side panel should keep the current Moka detail URL");
+assert.equal(sidepanelSource.includes("extractMokaHeaderMetadataFromTab"), true, "Side panel should fallback-read the active Moka header position");
+assert.equal(sidepanelSource.includes("candidateName: mokaHeaderMetadata.candidateName"), true, "Side panel Moka header fallback should override noisy inferred candidate names");
+assert.equal(sidepanelSource.includes("syncMokaCandidatePage(entry)"), true, "Side panel candidate cards should sync the active Moka page");
+const historySourceForSync = readFileSync(join(root, "extension/history/history.js"), "utf8");
+assert.equal(historySourceForSync.includes("syncMokaCandidatePage(entry)"), true, "History candidate cards should sync the active Moka page");
 const promptsSource = readFileSync(join(root, "extension/shared/prompts.js"), "utf8");
 assert.equal(promptsSource.includes('"genderAge"'), true, "Offer prompt should request gender and age first");
 assert.equal(promptsSource.includes('"recentCompanyBackground"'), true, "Offer prompt should request recent company background");
@@ -254,6 +277,12 @@ await saveAnalysisHistoryEntry({
   taskId: "task-offer-1",
   candidateName: "赵六",
   createdAt: "2026-05-22T08:10:00.000Z",
+  pageKey: "moka:application:795661549",
+  pageUrl: "https://app.mokahr.com/candidates/application/795661549/info?pipelineId=139436",
+  mokaApplicationId: "795661549",
+  mokaDetailUrl: "https://app.mokahr.com/candidates/application/795661549/info?pipelineId=139436",
+  mokaPositionRaw: "Frontend Engineer · Demo",
+  mokaPositionTitle: "Frontend Engineer",
   resumeTextLength: 1234,
   resumeImageCount: 3,
   resumeExtractedTextLength: 4567,
@@ -277,6 +306,9 @@ assert.equal(
 assert.equal(offerEntry.resumeTextLength, 1234, "History should persist page resume text length");
 assert.equal(offerEntry.resumeImageCount, 3, "History should persist resume image count");
 assert.equal(offerEntry.resumeExtractedTextLength, 4567, "History should persist OCR merged text length");
+assert.equal(offerEntry.mokaApplicationId, "795661549", "History should persist Moka application id");
+assert.equal(offerEntry.mokaDetailUrl.includes("/candidates/application/795661549/info"), true, "History should persist Moka detail URL");
+assert.equal(offerEntry.mokaPositionTitle, "Frontend Engineer", "History should persist Moka header position title");
 mockChromeStorage["resumeCopilot.analysisTasks"] = [
   { id: "task-bad-tab", status: "running", candidateName: "人才推荐", createdAt: "2026-05-22T08:00:00.000Z", updatedAt: "2026-05-22T08:00:00.000Z" },
   { id: "task-bad-stage", status: "running", candidateName: "待入职", createdAt: "2026-05-22T08:00:00.000Z", updatedAt: "2026-05-22T08:00:00.000Z" },
@@ -402,6 +434,8 @@ assert.equal(isCandidateNameRecognized("John Smith"), true);
 assert.equal(isCandidateNameRecognized("QS50"), false);
 assert.equal(isCandidateNameRecognized("QS200"), false);
 assert.equal(isCandidateNameRecognized("RAG"), false);
+assert.equal(isCandidateNameRecognized("搜索"), false);
+assert.equal(isResumeTagLikeCandidateName("搜索"), true);
 assert.equal(isCandidateNameRecognized("人才推荐"), false);
 assert.equal(isResumeTagLikeCandidateName("人才推荐"), true);
 assert.equal(isCandidateNameRecognized("待入职"), false);
@@ -434,6 +468,16 @@ assert.equal(
   getResumePageKey("https://app.mokahr.com/candidates/application/795661549/info?pipelineId=139436&outerStage=0&stageId=188473&jobPreference=all&jobStatus%5B0%5D=open&screenStageType=screening"),
   "moka:application:795661549",
   "Moka candidate application detail should derive page key from application id"
+);
+assert.equal(
+  getMokaApplicationId("https://app.mokahr.com/candidates/application/795661549/info?pipelineId=139436"),
+  "795661549",
+  "Moka candidate application detail should expose the raw application id"
+);
+assert.equal(
+  getMokaDetailUrl("https://app.mokahr.com/candidates/application/795661549/info?pipelineId=139436"),
+  "https://app.mokahr.com/candidates/application/795661549/info?pipelineId=139436",
+  "Moka candidate detail URL should be persisted exactly"
 );
 assert.equal(
   isSupportedResumePage("https://app.mokahr.com/candidates/application/795452539/attachments/resume?pipelineId=139436&outerStage=0"),

@@ -19,11 +19,23 @@ export function getResumePageKey(url) {
   if (!parsed) return "";
 
   if (MOKA_HOST_RE.test(parsed.hostname)) {
-    const applicationId = parsed.pathname.match(MOKA_CANDIDATE_APPLICATION_ID_RE)?.[1];
+    const applicationId = getMokaApplicationId(parsed.href);
     return applicationId ? `moka:application:${applicationId}` : "";
   }
 
   return "";
+}
+
+export function getMokaApplicationId(url) {
+  const parsed = parseHttpUrl(url);
+  if (!parsed || !MOKA_HOST_RE.test(parsed.hostname)) return "";
+  return parsed.pathname.match(MOKA_CANDIDATE_APPLICATION_ID_RE)?.[1] || "";
+}
+
+export function getMokaDetailUrl(url) {
+  const parsed = parseHttpUrl(url);
+  if (!parsed || !MOKA_HOST_RE.test(parsed.hostname)) return "";
+  return MOKA_CANDIDATE_DETAIL_PATH_RE.test(parsed.pathname) ? parsed.href : "";
 }
 
 function parseHttpUrl(url) {

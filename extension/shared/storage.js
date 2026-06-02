@@ -238,6 +238,12 @@ function normalizeAnalysisHistoryEntry(entry) {
     resumeFingerprint: compactText(entry.resumeFingerprint || ""),
     createdAt: compactText(entry.createdAt) || new Date().toISOString(),
     source: compactText(entry.source || "未知来源"),
+    pageKey: compactText(entry.pageKey || ""),
+    pageUrl: compactText(entry.pageUrl || ""),
+    mokaApplicationId: compactText(entry.mokaApplicationId || ""),
+    mokaDetailUrl: compactText(entry.mokaDetailUrl || ""),
+    mokaPositionRaw: compactText(entry.mokaPositionRaw || ""),
+    mokaPositionTitle: compactText(entry.mokaPositionTitle || ""),
     candidateName: isCandidateNameRecognized(candidateName) ? candidateName : "姓名未识别",
     resumeSummary: compactText(entry.resumeSummary || ""),
     resumePreview: compactText(entry.resumePreview || "").slice(0, 180),
@@ -300,7 +306,9 @@ function normalizeResumeCaptureDebug(value) {
     mokaIdentity: value.mokaIdentity && typeof value.mokaIdentity === "object"
       ? {
           name: compactText(value.mokaIdentity.name || "").slice(0, 40),
-          text: compactText(value.mokaIdentity.text || "").slice(0, 300)
+          text: compactText(value.mokaIdentity.text || "").slice(0, 300),
+          positionRaw: compactText(value.mokaIdentity.positionRaw || "").slice(0, 120),
+          positionTitle: compactText(value.mokaIdentity.positionTitle || "").slice(0, 40)
         }
       : null
   };

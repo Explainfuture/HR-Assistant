@@ -1,7 +1,12 @@
 import { extractTextFromPdfFile } from "../shared/pdfTextExtractor.js";
 import { inferCandidateName } from "../shared/candidateUtils.js";
 import { JOB_CATEGORIES } from "../shared/jsonUtils.js";
-import { getResumePageKey, isSupportedResumePage } from "../shared/pagePolicy.js";
+import {
+  getMokaApplicationId,
+  getMokaDetailUrl,
+  getResumePageKey,
+  isSupportedResumePage
+} from "../shared/pagePolicy.js";
 import { renderAnalysisReport } from "../shared/reportRenderer.js";
 import { createResumeFingerprint } from "../shared/resumeFingerprint.js";
 import { markEntered, updateWithTransition } from "../shared/viewTransitions.js";
@@ -41,6 +46,7 @@ const actionButtons = [
   reanalyzeLastButton
 ];
 const AUTO_CAPTURE_INTERVAL_MS = 2400;
+const AUTO_CAPTURE_TIMEOUT_MS = 15000;
 const HISTORY_PAGE_SIZE = 10;
 
 let settings = null;
@@ -53,6 +59,7 @@ let lastResume = null;
 let taskPollTimer = 0;
 let autoCaptureTimer = 0;
 let autoCaptureInFlight = false;
+let autoCaptureRerunRequested = false;
 let lastAutoFingerprint = "";
 let lastAutoPageKey = "";
 let lastTaskSignature = "";
@@ -268,6 +275,7 @@ async function submitAnalysisTask({ mode, busyButton, busyLabel, idleLabel, getR
     if (!response?.ok) throw new Error(response?.error || "后台任务提交失败");
 
     if (response.task?.deduped) {
+      await refreshHistoryFromStorage({ force: true });
       setStatus(`${response.task.candidateName} 已解析过，已跳过重复任务`, "success");
     } else {
       setStatus(`${response.task.candidateName} 已提交后台解析，可继续打开下一个简历`, "success");
@@ -375,7 +383,11 @@ function startAutoCapturePolling() {
 }
 
 async function autoCaptureActiveResume() {
-  if (autoCaptureInFlight || !settings?.apiKey || !profiles.length) return;
+  if (autoCaptureInFlight) {
+    autoCaptureRerunRequested = true;
+    return;
+  }
+  if (!settings?.apiKey || !profiles.length) return;
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !isSupportedResumePage(tab.url)) return;
@@ -388,7 +400,11 @@ async function autoCaptureActiveResume() {
     setQueueInlineStatus("正在采集当前简历图片");
     setStatus("正在采集当前候选人简历图片…");
 
-    const extraction = await extractResumeFromTab(tab);
+    const extraction = await withTimeout(
+      extractResumeFromTab(tab),
+      AUTO_CAPTURE_TIMEOUT_MS,
+      "简历采集超时，请稍后重试"
+    );
     if (!extraction?.ok) return;
 
     const resume = buildResumeFromExtraction(extraction);
@@ -426,6 +442,7 @@ async function autoCaptureActiveResume() {
     reanalyzeLastButton.disabled = false;
 
     if (response.task?.deduped) {
+      await refreshHistoryFromStorage({ force: true });
       setStatus(`${response.task.candidateName} 已解析过，自动跳过`, "success");
     } else {
       setStatus(`${response.task.candidateName} 已自动提交后台解析`, "success");
@@ -440,6 +457,10 @@ async function autoCaptureActiveResume() {
     }
   } finally {
     autoCaptureInFlight = false;
+    if (autoCaptureRerunRequested) {
+      autoCaptureRerunRequested = false;
+      window.setTimeout(() => autoCaptureActiveResume(), 120);
+    }
   }
 }
 
@@ -450,12 +471,18 @@ function isSilentAutoCaptureError(error) {
 }
 
 function renderQueueStatus(tasks) {
+  const runningCount = tasks.filter((task) => task.status === "running").length;
+  const queuedCount = tasks.filter((task) => task.status === "queued").length;
   const activeTask =
     tasks.find((task) => task.status === "running") ||
     tasks.find((task) => task.status === "queued") ||
     tasks.find((task) => task.status === "done") ||
     tasks.find((task) => task.status === "error");
-  setQueueInlineStatus(activeTask ? taskStatusText(activeTask) : "等待候选人详情");
+  const queueSummary = runningCount || queuedCount ? `运行 ${runningCount}，排队 ${queuedCount}` : "";
+  setQueueInlineStatus([
+    activeTask ? taskStatusText(activeTask) : "等待候选人详情",
+    queueSummary
+  ].filter(Boolean).join(" · "));
 }
 
 function setQueueInlineStatus(message) {
@@ -520,6 +547,7 @@ function renderHistoryList() {
       syncHistoryPageToSelected();
       renderHistoryList();
       renderSelectedHistoryReport();
+      syncMokaCandidatePage(entry);
     });
 
     const nameRow = document.createElement("span");
@@ -538,6 +566,7 @@ function renderHistoryList() {
     meta.textContent = [
       formatHistoryTime(entry.createdAt),
       entry.source,
+      entry.mokaPositionTitle,
       entry.profile?.category,
       entry.profile?.title
     ]
@@ -594,6 +623,31 @@ function renderHistoryButton() {
   historyButton.textContent = `历史页 ${historyEntries.length}`;
 }
 
+async function syncMokaCandidatePage(entry) {
+  if (!entry?.mokaDetailUrl) return;
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "RESUME_COPILOT_OPEN_MOKA_CANDIDATE",
+      payload: {
+        url: entry.mokaDetailUrl
+      }
+    });
+    if (!response?.ok) throw new Error(response?.error || "Moka page sync failed");
+  } catch (error) {
+    setStatus(error.message || String(error), "error");
+  }
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  let timeoutId = 0;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  });
+}
+
 async function extractResumeFromActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) throw new Error("无法获取当前标签页");
@@ -608,11 +662,106 @@ async function extractResumeFromTab(tab) {
   const extraction = await chrome.tabs.sendMessage(tab.id, {
     type: "RESUME_COPILOT_EXTRACT_RESUME"
   });
+  const mokaHeaderMetadata = await extractMokaHeaderMetadataFromTab(tab);
   return {
     ...extraction,
     source: getSourceLabelForUrl(tab.url),
-    pageKey: getResumePageKey(tab.url)
+    pageKey: getResumePageKey(tab.url),
+    pageUrl: tab.url || "",
+    mokaApplicationId: getMokaApplicationId(tab.url),
+    mokaDetailUrl: getMokaDetailUrl(tab.url),
+    mokaPositionRaw: extraction.mokaPositionRaw || mokaHeaderMetadata.positionRaw || "",
+    mokaPositionTitle: extraction.mokaPositionTitle || mokaHeaderMetadata.positionTitle || "",
+    candidateName: mokaHeaderMetadata.candidateName || extraction.candidateName || ""
   };
+}
+
+async function extractMokaHeaderMetadataFromTab(tab) {
+  if (!tab?.id || !getMokaDetailUrl(tab.url) || !chrome.scripting?.executeScript) {
+    return { candidateName: "", positionRaw: "", positionTitle: "" };
+  }
+
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        const selector = ".candidate-header-info__item-pandect-current,[class*='candidate-header-info__item-pandect-current']";
+        const nodes = [];
+        for (const headerRoot of document.querySelectorAll(".candidate-header-info")) {
+          if (isVisible(headerRoot)) nodes.push(...headerRoot.querySelectorAll(selector));
+        }
+        nodes.push(...document.querySelectorAll(selector));
+
+        for (const node of nodes) {
+          if (!isVisible(node)) continue;
+          const raw = normalizeLine(node.textContent || "");
+          const title = normalizeMokaPositionTitle(raw);
+          if (title) {
+            return {
+              candidateName: extractCandidateName(),
+              positionRaw: raw,
+              positionTitle: title
+            };
+          }
+        }
+        return { candidateName: extractCandidateName(), positionRaw: "", positionTitle: "" };
+
+        function extractCandidateName() {
+          for (const headerRoot of document.querySelectorAll(".candidate-header-info")) {
+            if (!isVisible(headerRoot)) continue;
+            const nameNode = headerRoot.querySelector(".candidate-header-info__name,[class*='candidate-header-info__name']");
+            const name = normalizeCandidateName(nameNode?.textContent || "");
+            if (name) return name;
+          }
+          return "";
+        }
+
+        function normalizeCandidateName(value) {
+          const text = normalizeLine(value)
+            .replace(/[^\u4e00-\u9fa5A-Za-z.'\-\s]/g, "")
+            .trim();
+          if (/^[\u4e00-\u9fa5]{2,6}$/.test(text)) return text;
+          if (/^[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){1,3}$/.test(text)) return text;
+          return "";
+        }
+
+        function normalizeMokaPositionTitle(value) {
+          const raw = normalizeLine(value);
+          if (!raw) return "";
+          const title = raw
+            .split(/\s*[\u00b7\u2022|｜]\s*/)[0]
+            .replace(/[（(]\s*人才推荐\s*[）)]/g, "")
+            .trim();
+          if (!title || /已申请|人才推荐/.test(title)) return "";
+          return title.length <= 60 ? title : "";
+        }
+
+        function normalizeLine(value) {
+          return String(value || "")
+            .replace(/\u00a0/g, " ")
+            .replace(/[ \t]+/g, " ")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+        }
+
+        function isVisible(node) {
+          if (!(node instanceof Element)) return false;
+          const rect = node.getBoundingClientRect();
+          const style = getComputedStyle(node);
+          return (
+            rect.width > 1 &&
+            rect.height > 1 &&
+            style.display !== "none" &&
+            style.visibility !== "hidden" &&
+            Number(style.opacity || 1) > 0
+          );
+        }
+      }
+    });
+    return result?.result || { positionRaw: "", positionTitle: "" };
+  } catch {
+    return { candidateName: "", positionRaw: "", positionTitle: "" };
+  }
 }
 
 function buildResumeFromExtraction(extraction) {
@@ -621,6 +770,11 @@ function buildResumeFromExtraction(extraction) {
   return {
     source: extraction.source || "网页简历",
     pageKey: extraction.pageKey || "",
+    pageUrl: extraction.pageUrl || "",
+    mokaApplicationId: extraction.mokaApplicationId || "",
+    mokaDetailUrl: extraction.mokaDetailUrl || "",
+    mokaPositionRaw: extraction.mokaPositionRaw || "",
+    mokaPositionTitle: extraction.mokaPositionTitle || "",
     candidateName: extraction.candidateName,
     text,
     imageUrls,
@@ -800,7 +954,8 @@ function renderOfferApplicationSection(entry) {
           profile: entry.profile,
           analysis: entry.analysis,
           resumeText: entry.analysis?.resumeExtractedText || entry.resumePreview || "",
-          headhunterReport: nextOffer.headhunterReport
+          headhunterReport: nextOffer.headhunterReport,
+          mokaPositionTitle: entry.mokaPositionTitle || ""
         }
       });
       if (!response?.ok) throw new Error(response?.error || "Offer申请模板生成失败");
@@ -809,6 +964,7 @@ function renderOfferApplicationSection(entry) {
         ...getDefaultOfferApplication().generatedFields,
         ...(response.fields || {})
       };
+      nextOffer.generatedFields.positioning = entry.mokaPositionTitle || nextOffer.generatedFields.positioning || "";
       nextOffer.content = composeOfferApplicationContent(nextOffer, entry);
       content.value = nextOffer.content;
       await persistOfferApplication(entry, nextOffer);
@@ -873,7 +1029,7 @@ async function persistOfferApplication(entry, offerApplication) {
 
 function composeOfferApplicationContent(offer, entry) {
   const generated = offer.generatedFields || {};
-  const positioning = generated.positioning || entry.profile?.title || "";
+  const positioning = entry.mokaPositionTitle || generated.positioning || entry.profile?.title || "";
   const basicInfo = [
     ...formatOfferGenderAge(generated.genderAge),
     generated.education || "",
@@ -978,6 +1134,9 @@ function createHistorySignature(entries) {
       candidateName: entry.candidateName,
       createdAt: entry.createdAt,
       source: entry.source,
+      mokaApplicationId: entry.mokaApplicationId,
+      mokaDetailUrl: entry.mokaDetailUrl,
+      mokaPositionTitle: entry.mokaPositionTitle,
       profile: entry.profile,
       matchScore: entry.matchScore,
       recommendation: entry.recommendation,
@@ -997,6 +1156,10 @@ function createReportSignature(entry) {
     resumeImageCount: entry.resumeImageCount,
     resumeCaptureDebug: entry.resumeCaptureDebug,
     resumeExtractedTextLength: entry.resumeExtractedTextLength,
+    mokaApplicationId: entry.mokaApplicationId,
+    mokaDetailUrl: entry.mokaDetailUrl,
+    mokaPositionRaw: entry.mokaPositionRaw,
+    mokaPositionTitle: entry.mokaPositionTitle,
     profile: entry.profile,
     matchScore: entry.matchScore,
     recommendation: entry.recommendation,
@@ -1018,6 +1181,7 @@ function renderHistoryDetailHeader(entry) {
   meta.textContent = [
     formatHistoryTime(entry.createdAt),
     entry.source,
+    entry.mokaPositionTitle,
     entry.profile?.category,
     entry.profile?.title,
     entry.recommendation

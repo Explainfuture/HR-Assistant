@@ -3,7 +3,7 @@
   "name": "Resume Copilot",
   "version": "0.1.0",
   "description": "Analyze BOSS and Moka candidate resumes against locally maintained JD profiles.",
-  "permissions": ["storage", "sidePanel", "activeTab", "tabs"],
+  "permissions": ["storage", "sidePanel", "activeTab", "tabs", "scripting"],
   "host_permissions": [
     "https://www.zhipin.com/*",
     "https://*.zhipin.com/*",

@@ -109,6 +109,21 @@ function render() {
   renderSelectedEntry();
 }
 
+async function syncMokaCandidatePage(entry) {
+  if (!entry?.mokaDetailUrl) return;
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "RESUME_COPILOT_OPEN_MOKA_CANDIDATE",
+      payload: {
+        url: entry.mokaDetailUrl
+      }
+    });
+    if (!response?.ok) throw new Error(response?.error || "Moka page sync failed");
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
 function renderHistoryList() {
   historyList.innerHTML = "";
 
@@ -139,6 +154,7 @@ function renderHistoryList() {
         selectedEntry = entry;
         render();
       });
+      syncMokaCandidatePage(entry);
     });
 
     const nameRow = document.createElement("span");
@@ -166,6 +182,7 @@ function renderHistoryList() {
     meta.textContent = [
       formatHistoryTime(entry.createdAt),
       entry.source,
+      entry.mokaPositionTitle,
       entry.profile?.category,
       entry.profile?.title
     ]
@@ -245,6 +262,7 @@ function renderSelectedEntry() {
   detailMeta.textContent = [
     formatHistoryTime(selectedEntry.createdAt),
     selectedEntry.source,
+    selectedEntry.mokaPositionTitle,
     selectedEntry.profile?.category,
     selectedEntry.profile?.title,
     selectedEntry.recommendation

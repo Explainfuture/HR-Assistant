@@ -136,6 +136,8 @@
       text,
       imageUrls,
       candidateName: mokaIdentity.name || inferCandidateName(text, container),
+      mokaPositionRaw: mokaIdentity.positionRaw || "",
+      mokaPositionTitle: mokaIdentity.positionTitle || "",
       debug
     };
   }
@@ -599,7 +601,10 @@
   }
 
   function isResumeTagLikeName(name) {
-    return MOKA_TAB_NAME_RE.test(name) || /^(?:qs\d+|c9|985|211)$/i.test(name) || /^[A-Z0-9]{3,8}$/.test(name);
+    return MOKA_TAB_NAME_RE.test(name) ||
+      /^(?:\u641c\u7d22|\u7b5b\u9009)$/u.test(name) ||
+      /^(?:qs\d+|c9|985|211)$/i.test(name) ||
+      /^[A-Z0-9]{3,8}$/.test(name);
   }
 
   function extractDisplayNameFromLine(line) {
@@ -685,13 +690,54 @@
   }
 
   function extractMokaCandidateIdentity() {
-    if (!isMokaCandidateDetailPage()) return { name: "", text: "" };
+    if (!isMokaCandidateDetailPage()) return { name: "", text: "", positionRaw: "", positionTitle: "" };
 
     const headerText = collectMokaHeaderText();
+    const position = extractMokaHeaderPosition();
     return {
       name: inferMokaHeaderName(headerText),
-      text: headerText.slice(0, 1200)
+      text: headerText.slice(0, 1200),
+      positionRaw: position.raw,
+      positionTitle: position.title
     };
+  }
+
+  function extractMokaHeaderPosition() {
+    const nodes = [];
+    for (const headerRoot of document.querySelectorAll(".candidate-header-info")) {
+      if (!(headerRoot instanceof Element) || !isVisible(headerRoot)) continue;
+      nodes.push(...collectMokaPositionNodes(headerRoot));
+    }
+    nodes.push(...collectMokaPositionNodes(document));
+
+    for (const node of nodes) {
+      if (!(node instanceof Element) || !isVisible(node)) continue;
+      const raw = normalizeLine(node.textContent || "");
+      const title = normalizeMokaPositionTitle(raw);
+      if (title) return { raw, title };
+    }
+
+    return { raw: "", title: "" };
+  }
+
+  function collectMokaPositionNodes(root) {
+    if (!root?.querySelectorAll) return [];
+    return [
+      ...root.querySelectorAll(
+        ".candidate-header-info__item-pandect-current,[class*='candidate-header-info__item-pandect-current']"
+      )
+    ];
+  }
+
+  function normalizeMokaPositionTitle(value) {
+    const raw = normalizeLine(value);
+    if (!raw) return "";
+    const title = raw
+      .split(/\s*[\u00b7\u2022|｜]\s*/)[0]
+      .replace(/[（(]\s*人才推荐\s*[）)]/g, "")
+      .trim();
+    if (!title || /已申请|人才推荐/.test(title)) return "";
+    return title.length <= 60 ? title : "";
   }
 
   function collectMokaHeaderText() {
@@ -727,9 +773,11 @@
   }
 
   function inferMokaHeaderName(headerText) {
-    const headerRoot = document.querySelector(".candidate-header-info");
-    const headerName = headerRoot instanceof Element ? inferNameFromCandidateHeaderInfo(headerRoot) : "";
-    if (headerName) return headerName;
+    for (const headerRoot of document.querySelectorAll(".candidate-header-info")) {
+      if (!(headerRoot instanceof Element) || !isVisible(headerRoot)) continue;
+      const headerName = inferNameFromCandidateHeaderInfo(headerRoot);
+      if (headerName) return headerName;
+    }
 
     const lines = String(headerText || "")
       .split(/\n+/)
@@ -747,6 +795,10 @@
   }
 
   function inferNameFromCandidateHeaderInfo(headerRoot) {
+    const nameNode = headerRoot.querySelector(".candidate-header-info__name,[class*='candidate-header-info__name']");
+    const explicitName = collectNameCandidatesFromNode(nameNode).find(isLikelyName);
+    if (explicitName) return explicitName;
+
     const firstRow = headerRoot.querySelector(".sd-Spacing-wrap,[class*='sd-Spacing-wrap']");
     const candidates = collectNameCandidatesFromNode(firstRow);
     if (!candidates.length) candidates.push(...collectNameCandidatesFromNode(headerRoot));
@@ -779,9 +831,10 @@
   }
 
   function formatMokaIdentityText(identity) {
-    if (!identity?.text && !identity?.name) return "";
+    if (!identity?.text && !identity?.name && !identity?.positionTitle) return "";
     return [
       identity.name ? `姓名：${identity.name}` : "",
+      identity.positionTitle ? `Moka推荐岗位：${identity.positionTitle}` : "",
       identity.text || ""
     ]
       .filter(Boolean)

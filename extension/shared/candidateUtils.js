@@ -72,7 +72,10 @@ function isLikelyDisplayName(value) {
 }
 
 function isResumeTagLikeName(name) {
-  return MOKA_TAB_NAME_RE.test(name) || /^(?:qs\d+|c9|985|211)$/i.test(name) || /^[A-Z0-9]{3,8}$/.test(name);
+  return MOKA_TAB_NAME_RE.test(name) ||
+    /^(?:\u641c\u7d22|\u7b5b\u9009)$/u.test(name) ||
+    /^(?:qs\d+|c9|985|211)$/i.test(name) ||
+    /^[A-Z0-9]{3,8}$/.test(name);
 }
 
 function extractDisplayNameFromLine(line) {
