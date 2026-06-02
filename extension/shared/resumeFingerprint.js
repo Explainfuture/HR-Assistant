@@ -1,8 +1,13 @@
 export function createResumeFingerprint(resume = {}) {
+  const pageKey = normalizePageKey(resume.pageKey || resume.resumePageKey || "");
   const text = normalizeResumeTextForFingerprint(resume.text || resume.resumeText || "");
   const imageUrls = Array.isArray(resume.imageUrls) ? resume.imageUrls : [];
   const imageSample = imageUrls.map(normalizeImageForFingerprint).filter(Boolean).join("|");
 
+  if (pageKey) {
+    const imagePart = imageSample ? `|images:${imageUrls.length}:${imageSample}` : "";
+    return `rf_${hashString(`page:${pageKey}${imagePart}`)}`;
+  }
   if (!text && !imageSample) return "";
 
   const textSample = text
@@ -10,6 +15,13 @@ export function createResumeFingerprint(resume = {}) {
     : "";
 
   return `rf_${hashString(`${textSample}|${imageSample}`)}`;
+}
+
+function normalizePageKey(value) {
+  return String(value || "")
+    .replace(/\s+/g, "")
+    .trim()
+    .toLowerCase();
 }
 
 export function normalizeResumeTextForFingerprint(value) {

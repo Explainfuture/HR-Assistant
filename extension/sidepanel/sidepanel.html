@@ -48,6 +48,7 @@
               <span>选择 PDF 文件</span>
               <input id="pdfInput" name="resume-pdf" type="file" accept="application/pdf,.pdf" />
             </label>
+            <p id="pdfFileStatus" class="file-status">未选择 PDF 文件</p>
             <button id="autoMatchPdfButton" type="button">解析并自动判断岗位</button>
             <button id="analyzePdfButton" class="button-secondary" type="button">
               按指定岗位评估
@@ -69,7 +70,9 @@
             <div class="brand-mark" aria-hidden="true">RC</div>
             <div>
               <h1>Resume Copilot</h1>
-              <p>候选人后台解析队列</p>
+              <p id="queueStatusText" class="queue-status" role="status" aria-live="polite">
+                候选人后台解析队列 · 等待候选人详情
+              </p>
             </div>
           </div>
           <div class="header-actions">
@@ -97,19 +100,14 @@
               <span id="candidateCount" class="count-badge">0</span>
             </div>
             <div id="historyList" class="history-list"></div>
+            <nav class="history-pagination" aria-label="候选人历史分页">
+              <button id="historyPrevButton" class="button-secondary button-compact" type="button">上一页</button>
+              <span id="historyPageInfo">1 / 1</span>
+              <button id="historyNextButton" class="button-secondary button-compact" type="button">下一页</button>
+            </nav>
           </aside>
 
           <section class="analysis-pane">
-            <section id="captureBlock" class="capture-block" hidden>
-              <h2>最近提交</h2>
-              <p id="captureSummary"></p>
-            </section>
-
-            <section class="task-block" aria-labelledby="taskTitle">
-              <h2 id="taskTitle">后台任务</h2>
-              <div id="taskList" class="task-list"></div>
-            </section>
-
             <section id="reportRoot" class="report" hidden></section>
           </section>
         </div>

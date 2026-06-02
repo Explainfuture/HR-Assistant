@@ -294,12 +294,17 @@ export function createId() {
 }
 
 export function compactText(value) {
-  return String(value || "")
+  const text = String(value || "")
     .replace(/\\n/g, " ")
     .replace(/\\r/g, " ")
     .replace(/[\r\n\t]+/g, " ")
     .replace(/\s{2,}/g, " ")
     .trim();
+  return isPlaceholderText(text) ? "" : text;
+}
+
+function isPlaceholderText(value) {
+  return /^(?:null|undefined|none|n\/a|nan)$/i.test(String(value || "").trim());
 }
 
 function normalizeArrayItem(value) {

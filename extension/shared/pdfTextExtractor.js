@@ -1,5 +1,4 @@
 import * as pdfjsLib from "../vendor/pdfjs/pdf.min.mjs";
-import { shouldRenderPdfPageImages } from "./pdfPolicy.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL(
   "vendor/pdfjs/pdf.worker.min.mjs"
@@ -7,7 +6,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL(
 
 const CMAP_URL = chrome.runtime.getURL("vendor/pdfjs/cmaps/");
 const STANDARD_FONT_DATA_URL = chrome.runtime.getURL("vendor/pdfjs/standard_fonts/");
-const MAX_RENDERED_PAGES = 8;
 const MAX_IMAGE_EDGE = 1800;
 const IMAGE_QUALITY = 0.86;
 const PDFJS_VERBOSITY_ERRORS = 0;
@@ -44,12 +42,10 @@ export async function extractTextFromPdfFile(file) {
   }
 
   const text = cleanPdfText(pages.join("\n\n"));
-  if (shouldRenderPdfPageImages(text)) {
-    for (let pageNumber = 1; pageNumber <= Math.min(pdf.numPages, MAX_RENDERED_PAGES); pageNumber += 1) {
-      const page = await pdf.getPage(pageNumber);
-      const imageUrl = await renderPageToImageUrl(page);
-      if (imageUrl) imageUrls.push(imageUrl);
-    }
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const imageUrl = await renderPageToImageUrl(page);
+    if (imageUrl) imageUrls.push(imageUrl);
   }
 
   if (text.length < 80 && !imageUrls.length) {

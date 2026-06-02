@@ -4,6 +4,7 @@ export const ERROR_TYPES = {
   PDF_RENDER_FAILED: "PDF_RENDER_FAILED",
   IMAGE_ENCODE_FAILED: "IMAGE_ENCODE_FAILED",
   MODEL_EMPTY_RESPONSE: "MODEL_EMPTY_RESPONSE",
+  MODEL_TIMEOUT: "MODEL_TIMEOUT",
   MODEL_JSON_INVALID: "MODEL_JSON_INVALID",
   JOB_PROFILE_EMPTY: "JOB_PROFILE_EMPTY",
   TASK_INTERRUPTED: "TASK_INTERRUPTED",
@@ -27,6 +28,7 @@ export function classifyError(message) {
   if (/render|渲染.*失败/i.test(text)) return ERROR_TYPES.PDF_RENDER_FAILED;
   if (/图片.*识别.*过短|图片.*简历|image/i.test(text)) return ERROR_TYPES.IMAGE_ENCODE_FAILED;
   if (/Doubao.*返回为空|返回为空|empty response/i.test(text)) return ERROR_TYPES.MODEL_EMPTY_RESPONSE;
+  if (/Doubao.*请求超时|请求超时|timeout|abort/i.test(text)) return ERROR_TYPES.MODEL_TIMEOUT;
   if (/JSON|parse|未找到有效/i.test(text)) return ERROR_TYPES.MODEL_JSON_INVALID;
   if (/interrupted|service worker|浏览器回收|任务中断/i.test(text)) return ERROR_TYPES.TASK_INTERRUPTED;
   if (/文本.*过短|采集.*过短|采集失败|当前网页/i.test(text)) return ERROR_TYPES.COLLECT_EMPTY;

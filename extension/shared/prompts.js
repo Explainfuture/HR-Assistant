@@ -185,3 +185,49 @@ ${resumeText}
     }
   ];
 }
+
+export function buildOfferApplicationMessages({ candidateName = "", profile = {}, analysis = {}, resumeText = "", headhunterReport = "" } = {}) {
+  return [
+    {
+      role: "system",
+      content:
+        "你是招聘推荐材料整理助手。只输出严格 JSON，不要输出 markdown、解释或代码块。语言要书面、克制、可用于内部 Offer 申请。"
+    },
+    {
+      role: "user",
+      content: `请基于候选人简历解析结果、匹配岗位和猎头推荐报告，整理 Offer 申请模板所需字段。
+
+候选人姓名：${candidateName}
+
+匹配岗位：
+${JSON.stringify(profile || {}, null, 2)}
+
+简历解析结果：
+${JSON.stringify(analysis || {}, null, 2)}
+
+简历 OCR/文本内容：
+${resumeText || ""}
+
+猎头推荐报告：
+${headhunterReport || ""}
+
+输出必须严格符合下面 JSON 结构：
+{
+  "genderAge": "候选人的性别和年龄，例如：女；30岁；如果没有明确依据，返回空字符串",
+  "education": "教育背景，例如：华中科技大学机械学院本科，同济大学设计创意学院硕士；如果没有明确依据，返回空字符串",
+  "recentCompanyBackground": "最近一段工作的公司或实习背景，例如：小红书工作背景；如果没有明确依据，返回空字符串",
+  "positioning": "根据 Moka/匹配岗位生成职位定位，优先使用匹配岗位 title；如果没有明确岗位，返回空字符串",
+  "highlights": "用一段书面化文字概括候选人核心亮点，控制在 120-260 字。结合简历解析和猎头推荐报告，不要编造事实。"
+}
+
+要求：
+- 最终内容会被拼成三段：【基础情况】、【定位】、【亮点】；不要生成离职原因、薪资、地点、面试评价、其他机会等字段。
+- 【基础情况】最终格式应类似：女；30岁；华中科技大学机械学院本科，同济大学设计创意学院硕士；小红书工作背景。
+- genderAge 必须只写性别和年龄，用中文分号分隔，例如：女；30岁。不要混入学历、岗位或经历。
+- education 只写学校、专业、学历层次。
+- recentCompanyBackground 只写最近一段工作/实习/项目所在公司或组织背景，不要扩展成长段评价。
+- positioning 是岗位定位，不是候选人自我介绍。
+- highlights 需要书面化、适合 Offer 申请材料，可以综合猎头推荐报告补充表达，但必须基于已给信息；缺失信息保持空字符串。`
+    }
+  ];
+}

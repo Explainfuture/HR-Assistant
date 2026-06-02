@@ -1,5 +1,5 @@
 import { compactText, createId, ensureArray, normalizeJobProfile } from "./jsonUtils.js";
-import { isCandidateNameRecognized } from "./candidateUtils.js";
+import { isCandidateNameRecognized, isResumeTagLikeCandidateName } from "./candidateUtils.js";
 
 const SETTINGS_KEY = "resumeCopilot.settings";
 const JOB_PROFILES_KEY = "resumeCopilot.jobProfiles";
@@ -62,14 +62,17 @@ export async function deleteJobProfile(id) {
 export async function listAnalysisHistory() {
   const result = await chrome.storage.local.get(ANALYSIS_HISTORY_KEY);
   return Array.isArray(result[ANALYSIS_HISTORY_KEY])
-    ? result[ANALYSIS_HISTORY_KEY].map(normalizeAnalysisHistoryEntry).filter(Boolean)
+    ? dedupeAnalysisHistory(result[ANALYSIS_HISTORY_KEY].map(normalizeAnalysisHistoryEntry).filter(Boolean))
     : [];
 }
 
 export async function saveAnalysisHistoryEntry(entry) {
   const history = await listAnalysisHistory();
   const nextEntry = normalizeAnalysisHistoryEntry(entry);
-  const nextHistory = [nextEntry, ...history]
+  const nextHistory = [
+    nextEntry,
+    ...history.filter((item) => !isSameAnalysisHistoryEntry(item, nextEntry))
+  ]
     .filter(Boolean)
     .slice(0, MAX_ANALYSIS_HISTORY);
 
@@ -90,6 +93,28 @@ export async function deleteAnalysisHistoryEntry(id) {
   const nextHistory = history.filter((entry) => entry.id !== targetId);
   await chrome.storage.local.set({ [ANALYSIS_HISTORY_KEY]: nextHistory });
   return nextHistory;
+}
+
+function isSameAnalysisHistoryEntry(entry, nextEntry) {
+  if (!entry || !nextEntry) return false;
+  if (nextEntry.resumeFingerprint && entry.resumeFingerprint === nextEntry.resumeFingerprint) return true;
+  if (nextEntry.taskId && entry.taskId === nextEntry.taskId) return true;
+  if (nextEntry.id && entry.id === nextEntry.id) return true;
+  return false;
+}
+
+function dedupeAnalysisHistory(history) {
+  const seen = new Set();
+  const deduped = [];
+
+  for (const entry of history) {
+    const key = entry.resumeFingerprint || entry.taskId || entry.id;
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    deduped.push(entry);
+  }
+
+  return deduped;
 }
 
 export async function deleteAnalysisHistoryEntries(ids) {
@@ -206,6 +231,7 @@ function normalizeAnalysisHistoryEntry(entry) {
 
   const profile = entry.profile || {};
   const candidateName = compactText(entry.candidateName || entry.analysis?.candidateName || "");
+  if (isResumeTagLikeCandidateName(candidateName)) return null;
   return {
     id: compactText(entry.id || entry.taskId) || createId(),
     taskId: compactText(entry.taskId || ""),
@@ -215,6 +241,10 @@ function normalizeAnalysisHistoryEntry(entry) {
     candidateName: isCandidateNameRecognized(candidateName) ? candidateName : "姓名未识别",
     resumeSummary: compactText(entry.resumeSummary || ""),
     resumePreview: compactText(entry.resumePreview || "").slice(0, 180),
+    resumeTextLength: normalizeNonNegativeInteger(entry.resumeTextLength),
+    resumeImageCount: normalizeNonNegativeInteger(entry.resumeImageCount),
+    resumeCaptureDebug: normalizeResumeCaptureDebug(entry.resumeCaptureDebug),
+    resumeExtractedTextLength: normalizeNonNegativeInteger(entry.resumeExtractedTextLength),
     profile: {
       id: compactText(profile.id || entry.profileId || ""),
       title: compactText(profile.title || entry.profileTitle || "未命名岗位"),
@@ -223,13 +253,77 @@ function normalizeAnalysisHistoryEntry(entry) {
     matchScore: Number(entry.matchScore ?? 0),
     recommendation: compactText(entry.recommendation || "需要人工复核"),
     copyableConclusion: compactText(entry.copyableConclusion || "").slice(0, 320),
+    offerApplication: normalizeOfferApplication(entry.offerApplication),
     analysis: entry.analysis && typeof entry.analysis === "object" ? entry.analysis : null,
     batchResults: Array.isArray(entry.batchResults) ? entry.batchResults.slice(0, 50) : []
   };
 }
 
+function normalizeOfferApplication(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const manual = source.manualFields && typeof source.manualFields === "object" ? source.manualFields : {};
+  const generated = source.generatedFields && typeof source.generatedFields === "object" ? source.generatedFields : {};
+  return {
+    headhunterReport: normalizeMultilineText(source.headhunterReport || ""),
+    manualFields: {
+      departureReason: compactText(manual.departureReason || ""),
+      otherOpportunities: compactText(manual.otherOpportunities || ""),
+      location: compactText(manual.location || ""),
+      currentSalary: compactText(manual.currentSalary || ""),
+      salaryPlan: compactText(manual.salaryPlan || ""),
+      interviewEvaluation: compactText(manual.interviewEvaluation || "")
+    },
+    generatedFields: {
+      genderAge: compactText(generated.genderAge || ""),
+      education: compactText(generated.education || ""),
+      recentCompanyBackground: compactText(generated.recentCompanyBackground || ""),
+      positioning: compactText(generated.positioning || ""),
+      highlights: compactText(generated.highlights || "")
+    },
+    content: normalizeMultilineText(source.content || "")
+  };
+}
+
+function normalizeResumeCaptureDebug(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    container: compactText(value.container || "").slice(0, 160),
+    expandedClicks: normalizeNonNegativeInteger(value.expandedClicks),
+    scrollRounds: normalizeNonNegativeInteger(value.scrollRounds),
+    rawLength: normalizeNonNegativeInteger(value.rawLength),
+    pdfResumeImages: normalizeNonNegativeInteger(value.pdfResumeImages),
+    pdfResumeRoots: normalizeNonNegativeInteger(value.pdfResumeRoots),
+    pdfResumeImgTags: normalizeNonNegativeInteger(value.pdfResumeImgTags),
+    pdfResumeSampleUrls: Array.isArray(value.pdfResumeSampleUrls)
+      ? value.pdfResumeSampleUrls.map((url) => compactText(url || "").slice(0, 240)).filter(Boolean).slice(0, 5)
+      : [],
+    mokaIdentity: value.mokaIdentity && typeof value.mokaIdentity === "object"
+      ? {
+          name: compactText(value.mokaIdentity.name || "").slice(0, 40),
+          text: compactText(value.mokaIdentity.text || "").slice(0, 300)
+        }
+      : null
+  };
+}
+
+function normalizeNonNegativeInteger(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.trunc(number) : 0;
+}
+
+function normalizeMultilineText(value) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{4,}/g, "\n\n\n")
+    .trim();
+}
+
 function normalizeAnalysisTask(task) {
   if (!task || typeof task !== "object") return null;
+  const candidateName = compactText(task.candidateName || "姓名未识别");
+  if (isResumeTagLikeCandidateName(candidateName)) return null;
   return {
     id: compactText(task.id) || createId(),
     resumeFingerprint: compactText(task.resumeFingerprint || ""),
@@ -237,7 +331,7 @@ function normalizeAnalysisTask(task) {
     status: ["queued", "running", "done", "error"].includes(task.status) ? task.status : "queued",
     createdAt: compactText(task.createdAt) || new Date().toISOString(),
     updatedAt: compactText(task.updatedAt) || new Date().toISOString(),
-    candidateName: compactText(task.candidateName || "姓名未识别"),
+    candidateName,
     source: compactText(task.source || "未知来源"),
     profileId: compactText(task.profileId || ""),
     profileTitle: compactText(task.profileTitle || ""),
@@ -247,9 +341,12 @@ function normalizeAnalysisTask(task) {
     progress: task.progress && typeof task.progress === "object"
       ? {
           finished: Number(task.progress.finished || 0),
-          total: Number(task.progress.total || 0)
+          total: Number(task.progress.total || 0),
+          stage: compactText(task.progress.stage || ""),
+          ocrFinished: Number(task.progress.ocrFinished || 0),
+          ocrTotal: Number(task.progress.ocrTotal || 0)
         }
-      : { finished: 0, total: 0 },
+      : { finished: 0, total: 0, stage: "", ocrFinished: 0, ocrTotal: 0 },
     error: compactText(task.error || ""),
     errorType: compactText(task.errorType || "")
   };

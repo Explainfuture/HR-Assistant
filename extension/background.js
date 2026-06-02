@@ -1,5 +1,13 @@
-import { analyzeCandidate, analyzeCandidateAgainstProfiles } from "./shared/deepseekClient.js";
-import { inferCandidateName, isCandidateNameRecognized } from "./shared/candidateUtils.js";
+import {
+  analyzeCandidate,
+  analyzeCandidateAgainstProfiles,
+  generateOfferApplicationFields
+} from "./shared/deepseekClient.js";
+import {
+  inferCandidateName,
+  isCandidateNameRecognized,
+  isResumeTagLikeCandidateName
+} from "./shared/candidateUtils.js";
 import {
   getSettings,
   listJobProfiles,
@@ -41,23 +49,39 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "RESUME_COPILOT_GENERATE_OFFER_APPLICATION") {
+    ensureTasksReady().then(() => generateOfferApplication(message.payload))
+      .then((fields) => sendResponse({ ok: true, fields }))
+      .catch((error) => sendResponse({ ok: false, error: error.message || String(error) }));
+    return true;
+  }
+
   return false;
 });
 
 async function submitTask(payload) {
   const resumeText = String(payload?.resume?.text || "").trim();
   const resumeImageUrls = Array.isArray(payload?.resume?.imageUrls)
-    ? payload.resume.imageUrls.filter(Boolean).slice(0, 8)
+    ? payload.resume.imageUrls.filter(Boolean)
     : [];
   if (resumeText.length < 80 && !resumeImageUrls.length) {
     throw new Error("简历文本过短，无法提交后台分析");
   }
 
+  const rawCandidateName = payload?.resume?.candidateName || payload?.resume?.fallbackName || "";
   const candidateName = inferCandidateName(
     resumeText,
-    payload?.resume?.candidateName || payload?.resume?.fallbackName
+    rawCandidateName
   );
+  const source = payload?.resume?.source || "未知来源";
+  if (/moka/i.test(source) && !payload?.resume?.pageKey) {
+    throw new Error("请打开 Moka 候选人详情页后再解析");
+  }
+  if (isResumeTagLikeCandidateName(candidateName) || (!isCandidateNameRecognized(candidateName) && isResumeTagLikeCandidateName(rawCandidateName))) {
+    throw new Error("当前页面不是候选人详情，请打开具体候选人简历后再解析");
+  }
   const resumeFingerprint = createResumeFingerprint({
+    pageKey: payload?.resume?.pageKey,
     text: resumeText,
     imageUrls: resumeImageUrls
   });
@@ -75,10 +99,11 @@ async function submitTask(payload) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     candidateName,
-    source: payload?.resume?.source || "未知来源",
+    source,
     resume: {
       text: resumeText,
       imageUrls: resumeImageUrls,
+      captureDebug: normalizeCaptureDebug(payload?.resume?.debug),
       summary: payload?.resume?.summary || "",
       preview: resumeText.slice(0, 180)
     },
@@ -99,6 +124,44 @@ async function submitTask(payload) {
   await persistTasks();
   scheduleQueue();
   return serializeTask(task);
+}
+
+function normalizeCaptureDebug(debug) {
+  if (!debug || typeof debug !== "object") return null;
+  const mokaIdentity = debug.mokaIdentity && typeof debug.mokaIdentity === "object"
+    ? {
+        name: String(debug.mokaIdentity.name || "").slice(0, 40),
+        text: String(debug.mokaIdentity.text || "").slice(0, 300)
+      }
+    : null;
+  return {
+    container: String(debug.container || "").slice(0, 160),
+    expandedClicks: Number(debug.expandedClicks || 0),
+    scrollRounds: Number(debug.scrollRounds || 0),
+    rawLength: Number(debug.rawLength || 0),
+    pdfResumeImages: Number(debug.pdfResumeImages || 0),
+    pdfResumeRoots: Number(debug.pdfResumeRoots || 0),
+    pdfResumeImgTags: Number(debug.pdfResumeImgTags || 0),
+    pdfResumeSampleUrls: Array.isArray(debug.pdfResumeSampleUrls)
+      ? debug.pdfResumeSampleUrls.map((url) => String(url || "").slice(0, 240)).filter(Boolean).slice(0, 5)
+      : [],
+    mokaIdentity
+  };
+}
+
+async function generateOfferApplication(payload = {}) {
+  const settings = await getSettings();
+  if (!settings.apiKey) throw new Error("请先在 Options 页面配置 Doubao API Key");
+
+  return generateOfferApplicationFields({
+    apiKey: settings.apiKey,
+    model: settings.model,
+    candidateName: payload.candidateName || "",
+    profile: payload.profile || {},
+    analysis: payload.analysis || {},
+    resumeText: payload.resumeText || "",
+    headhunterReport: payload.headhunterReport || ""
+  });
 }
 
 function scheduleQueue() {
@@ -148,16 +211,34 @@ async function runSingleTask(task, settings, profiles) {
   const profile = profiles.find((item) => item.id === task.profileId);
   if (!profile) throw new Error("请先选择一个岗位知识库");
 
-  task.progress = { finished: 0, total: 1 };
+  task.progress = {
+    finished: 0,
+    total: 1,
+    stage: task.resume.imageUrls?.length ? "ocr" : "matching",
+    ocrFinished: 0,
+    ocrTotal: task.resume.imageUrls?.length || 0
+  };
+  await persistTasks();
   const analysis = await analyzeCandidate({
     apiKey: settings.apiKey,
     model: settings.model,
     jobProfile: profile,
     resumeText: task.resume.text,
-    resumeImages: task.resume.imageUrls || []
+    resumeImages: task.resume.imageUrls || [],
+    onProgress: ({ finished, total, stage, ocrFinished, ocrTotal }) => {
+      task.progress = {
+        finished,
+        total,
+        stage: stage || "matching",
+        ocrFinished: Number(ocrFinished || 0),
+        ocrTotal: Number(ocrTotal || 0)
+      };
+      task.updatedAt = new Date().toISOString();
+      persistTasks().catch(() => {});
+    }
   });
-  task.progress = { finished: 1, total: 1 };
-  await completeTask(task, profile, analysis, []);
+  task.progress = { finished: 1, total: 1, stage: "matching" };
+  await completeTask(task, profile, analysis, [], settings);
 }
 
 async function runAutoTask(task, settings, profiles) {
@@ -166,7 +247,14 @@ async function runAutoTask(task, settings, profiles) {
     : profiles;
   if (!candidates.length) throw new Error("当前大类下没有可用于自动匹配的岗位知识库");
 
-  task.progress = { finished: 0, total: candidates.length };
+  task.progress = {
+    finished: 0,
+    total: candidates.length,
+    stage: task.resume.imageUrls?.length ? "ocr" : "matching",
+    ocrFinished: 0,
+    ocrTotal: task.resume.imageUrls?.length || 0
+  };
+  await persistTasks();
   const results = await analyzeCandidateAgainstProfiles({
     apiKey: settings.apiKey,
     model: settings.model,
@@ -174,8 +262,14 @@ async function runAutoTask(task, settings, profiles) {
     resumeText: task.resume.text,
     resumeImages: task.resume.imageUrls || [],
     concurrency: 3,
-    onProgress: ({ finished, total }) => {
-      task.progress = { finished, total };
+    onProgress: ({ finished, total, stage, ocrFinished, ocrTotal }) => {
+      task.progress = {
+        finished,
+        total,
+        stage: stage || "matching",
+        ocrFinished: Number(ocrFinished || 0),
+        ocrTotal: Number(ocrTotal || 0)
+      };
       task.updatedAt = new Date().toISOString();
       persistTasks().catch(() => {});
     }
@@ -190,13 +284,15 @@ async function runAutoTask(task, settings, profiles) {
   const best = successful.reduce((currentBest, item) =>
     getMatchScore(item.analysis) > getMatchScore(currentBest.analysis) ? item : currentBest
   );
-  await completeTask(task, best.profile, best.analysis, summarizeBatchResults(results));
+  await completeTask(task, best.profile, best.analysis, summarizeBatchResults(results), settings);
 }
 
-async function completeTask(task, profile, analysis, batchResults) {
-  const candidateName = isCandidateNameRecognized(analysis?.candidateName)
-    ? analysis.candidateName
-    : task.candidateName;
+async function completeTask(task, profile, analysis, batchResults, settings) {
+  const candidateName = shouldLockSubmittedCandidateName(task)
+    ? task.candidateName
+    : (isCandidateNameRecognized(analysis?.candidateName)
+      ? analysis.candidateName
+      : task.candidateName);
   task.candidateName = candidateName;
 
   task.result = {
@@ -205,6 +301,14 @@ async function completeTask(task, profile, analysis, batchResults) {
     batchResults
   };
 
+  const offerApplication = await buildAutomaticOfferApplication({
+    settings,
+    candidateName,
+    profile,
+    analysis,
+    resumeText: analysis?.resumeExtractedText || task.resume.text
+  });
+
   await saveAnalysisHistoryEntry({
     taskId: task.id,
     resumeFingerprint: task.resumeFingerprint,
@@ -212,6 +316,10 @@ async function completeTask(task, profile, analysis, batchResults) {
     candidateName,
     resumeSummary: task.resume.summary,
     resumePreview: task.resume.preview,
+    resumeTextLength: task.resume.text.length,
+    resumeImageCount: task.resume.imageUrls?.length || 0,
+    resumeCaptureDebug: task.resume.captureDebug || null,
+    resumeExtractedTextLength: String(analysis?.resumeExtractedText || "").length,
     profile: {
       id: profile.id,
       title: profile.title,
@@ -220,9 +328,96 @@ async function completeTask(task, profile, analysis, batchResults) {
     matchScore: analysis?.matchedRole?.matchScore,
     recommendation: analysis?.matchedRole?.recommendation,
     copyableConclusion: analysis?.copyableConclusion,
+    offerApplication,
     analysis,
     batchResults
   });
+}
+
+function shouldLockSubmittedCandidateName(task) {
+  return /moka/i.test(task?.source || "") && isCandidateNameRecognized(task?.candidateName);
+}
+
+async function buildAutomaticOfferApplication({ settings, candidateName, profile, analysis, resumeText }) {
+  const manualFields = {
+    departureReason: "",
+    otherOpportunities: "",
+    location: "",
+    currentSalary: "",
+    salaryPlan: "",
+    interviewEvaluation: ""
+  };
+  let generatedFields = {
+    genderAge: "",
+    education: "",
+    recentCompanyBackground: "",
+    positioning: profile?.title || "",
+    highlights: analysis?.experienceAnalysis?.oneLineProfile || analysis?.copyableConclusion || ""
+  };
+
+  try {
+    generatedFields = {
+      ...generatedFields,
+      ...(await generateOfferApplicationFields({
+        apiKey: settings.apiKey,
+        model: settings.model,
+        candidateName,
+        profile,
+        analysis,
+        resumeText,
+        headhunterReport: ""
+      }))
+    };
+  } catch {
+    // Keep the main resume analysis successful even if template generation is unavailable.
+  }
+
+  const offerApplication = {
+    headhunterReport: "",
+    manualFields,
+    generatedFields,
+    content: ""
+  };
+  offerApplication.content = composeOfferApplicationContent(offerApplication, profile);
+  return offerApplication;
+}
+
+function composeOfferApplicationContent(offer, profile) {
+  const generated = offer.generatedFields || {};
+  const positioning = generated.positioning || profile?.title || "";
+  const basicInfo = [
+    ...formatOfferGenderAge(generated.genderAge),
+    generated.education || "",
+    generated.recentCompanyBackground || ""
+  ].map(compactOfferField).filter(Boolean).join("；");
+  return [
+    "【基础情况】：",
+    basicInfo,
+    "【定位】：",
+    positioning,
+    "【亮点】：",
+    generated.highlights || ""
+  ].join("\n");
+}
+
+function formatOfferGenderAge(value) {
+  const text = compactOfferField(value).replace(/^性别年龄[:：]\s*/, "");
+  if (!text) return [];
+
+  const joinedMatch = text.match(/^([男女])(?:性)?\s*(\d{1,2}\s*岁)$/);
+  if (joinedMatch) return [joinedMatch[1], joinedMatch[2]];
+
+  const separatedMatch = text.match(/^([男女])(?:性)?[\s,，;；、/|]+(\d{1,2}\s*岁)$/);
+  if (separatedMatch) return [separatedMatch[1], separatedMatch[2]];
+
+  const parts = text.split(/[;；]/).map(compactOfferField).filter(Boolean);
+  return parts.length > 1 ? parts : [text];
+}
+
+function compactOfferField(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function summarizeBatchResults(results) {

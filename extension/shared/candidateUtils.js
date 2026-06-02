@@ -12,7 +12,9 @@ const LINE_HEAD_ENGLISH_NAME_RE =
 const NOISE_RE =
   /boss|直聘|沟通|在线|简历|求职|附件|工作经历|教育经历|项目经历|个人优势|自我评价|岗位|职位|浏览|联系|期望|学历|年龄|经验|优势|技能|公司|项目|作品|上传|解析|自定义|添加|打招呼|交换|电话|微信|立即|查看|收藏|备注|编辑|男|女/i;
 const NOT_NAME_RE =
-  /公司|有限|集团|科技|投资|资本|大学|学院|本科|硕士|博士|大专|工程师|开发|产品|运营|经理|实习|经历|内容|项目|前端|后端|全栈|算法|数据|java|react|typescript|python|fastapi|engineer|developer|manager|designer|consultant|intern|university|college|school|company|limited|inc|llc|corp|group|technology|software|resume|curriculum|vitae|profile|summary|experience|education|skills|project/i;
+  /公司|有限|集团|科技|投资|资本|大学|学院|本科|硕士|博士|大专|双一流|一流大学|工程师|开发|产品|运营|经理|实习|经历|内容|项目|前端|后端|全栈|算法|数据|java|react|typescript|python|fastapi|engineer|developer|manager|designer|consultant|intern|university|college|school|company|limited|inc|llc|corp|group|technology|software|resume|curriculum|vitae|profile|summary|experience|education|skills|project/i;
+const MOKA_TAB_NAME_RE =
+  /^(?:人才推荐|招聘职位|候选人管理|用人部门筛选|推荐给用人部门|初筛|面试|Offer\/录用|Offer录用|操作记录|附加信息|基本信息|历史标签|当前网页简历|岗位列表|岗位推荐|待入职|已入职|未推荐|已推荐|未淘汰|已淘汰|待处理|待分配)$/i;
 const ENGLISH_NAME_STOP_WORD_RE =
   /^(Engineer|Developer|Manager|Designer|Consultant|Intern|University|College|School|Company|Technology|Software|Resume|Profile|Experience|Education|Skills|Project|Bachelor|Master|PhD|Senior|Junior|Frontend|Backend|Fullstack|Product|Data)$/i;
 
@@ -49,8 +51,13 @@ export function isCandidateNameRecognized(candidateName) {
   return isLikelyName(candidateName) && candidateName !== "姓名未识别";
 }
 
+export function isResumeTagLikeCandidateName(candidateName) {
+  return isResumeTagLikeName(compactText(candidateName));
+}
+
 function isLikelyName(value) {
   const name = compactText(value);
+  if (isResumeTagLikeName(name)) return false;
   if (CHINESE_NAME_RE.test(name)) return !NOISE_RE.test(name) && !NOT_NAME_RE.test(name);
   if (ENGLISH_NAME_RE.test(name)) return !NOISE_RE.test(name) && !NOT_NAME_RE.test(name);
   return isLikelyDisplayName(name);
@@ -59,8 +66,13 @@ function isLikelyName(value) {
 function isLikelyDisplayName(value) {
   const name = compactText(value);
   if (!DISPLAY_NAME_RE.test(name)) return false;
+  if (isResumeTagLikeName(name)) return false;
   if (NOISE_RE.test(name) || NOT_NAME_RE.test(name)) return false;
   return !/^(admin|user|test|null|undefined|resume|candidate|boss|hr)$/i.test(name);
+}
+
+function isResumeTagLikeName(name) {
+  return MOKA_TAB_NAME_RE.test(name) || /^(?:qs\d+|c9|985|211)$/i.test(name) || /^[A-Z0-9]{3,8}$/.test(name);
 }
 
 function extractDisplayNameFromLine(line) {

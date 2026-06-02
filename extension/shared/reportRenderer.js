@@ -16,10 +16,10 @@ export function renderAnalysisReport({
 
   fragment.append(
     section("匹配岗位", [
-      scoreRow(role.matchScore ?? fallbackScore, role.recommendation || fallbackRecommendation),
+      scoreRow(role.matchScore ?? fallbackScore, cleanReportText(role.recommendation) || fallbackRecommendation),
       scoreBreakdownBlock(analysis?.scoreBreakdown),
       thresholdBlock(analysis?.thresholdChecks),
-      paragraph(role.roleName || fallbackProfileTitle, "muted")
+      paragraph(cleanReportText(role.roleName) || fallbackProfileTitle, "muted")
     ], headingLevel)
   );
 
@@ -30,7 +30,7 @@ export function renderAnalysisReport({
   const experience = analysis?.experienceAnalysis || {};
   fragment.append(
     section("经验分析", [
-      paragraph(experience.oneLineProfile || "未返回一句话画像。"),
+      paragraph(cleanReportText(experience.oneLineProfile) || "未返回一句话画像。"),
       listBlock("匹配项目", experience.matchedProjects, headingLevel + 1),
       listBlock("不匹配项目", experience.mismatchedProjects, headingLevel + 1),
       listBlock("疑似包装点", experience.overclaimRisks, headingLevel + 1),
@@ -58,9 +58,10 @@ export function renderAnalysisReport({
 
   fragment.append(section("面试追问", [listBlock("", analysis?.interviewQuestions, headingLevel + 1)], headingLevel));
 
-  const summaryChildren = [paragraph(copyableConclusion || "暂无可复制总结。")];
+  const copyableSummary = cleanReportText(copyableConclusion) || "暂无可复制总结。";
+  const summaryChildren = [paragraph(copyableSummary)];
   if (includeCopyButton) {
-    summaryChildren.push(copyButton(copyableConclusion, onCopy));
+    summaryChildren.push(copyButton(copyableSummary, onCopy));
   }
   fragment.append(section("复制总结", summaryChildren, headingLevel));
 
@@ -109,7 +110,7 @@ function scoreBreakdownBlock(scoreBreakdown) {
     header.className = "score-breakdown-header";
 
     const label = document.createElement("span");
-    label.textContent = item.label || dimension.label;
+    label.textContent = cleanReportText(item.label) || dimension.label;
 
     const value = document.createElement("span");
     value.textContent = [
@@ -127,7 +128,7 @@ function scoreBreakdownBlock(scoreBreakdown) {
 
     const reason = document.createElement("p");
     reason.className = "score-reason";
-    reason.textContent = item.reason || "暂无得分说明";
+    reason.textContent = cleanReportText(item.reason) || "暂无得分说明";
 
     row.append(header, meter, reason, evidenceList(item.evidence));
     return row;
@@ -150,7 +151,7 @@ function confidenceText(value) {
 
 function evidenceList(evidence) {
   const items = Array.isArray(evidence)
-    ? evidence.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 3)
+    ? evidence.map(cleanReportText).filter(Boolean).slice(0, 3)
     : [];
   if (!items.length) return null;
 
@@ -187,7 +188,7 @@ function thresholdBlock(thresholdChecks) {
     status.textContent = thresholdStatusText(check.status);
 
     const summary = document.createElement("p");
-    summary.textContent = [check.summary, check.reason, check.followUp].filter(Boolean).join("；") || "简历未明确体现";
+    summary.textContent = [check.summary, check.reason, check.followUp].map(cleanReportText).filter(Boolean).join("；") || "简历未明确体现";
 
     item.append(label, status, summary);
     node.append(item);
@@ -210,17 +211,17 @@ function rankingBlock(results) {
   for (const item of sorted) {
     const profile = item.profile || {};
     const score = item.analysis ? getMatchScore(item.analysis) : item.matchScore;
-    const recommendation =
-      item.analysis?.matchedRole?.recommendation || item.recommendation || item.error || "评估失败";
+  const recommendation =
+    item.analysis?.matchedRole?.recommendation || item.recommendation || item.error || "评估失败";
 
     const li = document.createElement("li");
     const title = document.createElement("span");
     title.className = "ranking-title";
-    title.textContent = profile.title || "未命名岗位";
+    title.textContent = cleanReportText(profile.title) || "未命名岗位";
 
     const meta = document.createElement("span");
     meta.className = "ranking-meta";
-    meta.textContent = `${profile.category || "未分类"} · ${score ?? "-"} · ${recommendation}`;
+    meta.textContent = `${cleanReportText(profile.category) || "未分类"} · ${score ?? "-"} · ${cleanReportText(recommendation) || "评估失败"}`;
 
     li.append(title, meta);
     list.append(li);
@@ -230,7 +231,9 @@ function rankingBlock(results) {
 }
 
 function listBlock(title, items, headingLevel) {
-  const normalized = Array.isArray(items) ? items : [];
+  const normalized = Array.isArray(items)
+    ? items.map(cleanReportValue).filter((item) => item !== "" && item != null)
+    : [];
   const fragment = document.createDocumentFragment();
 
   if (title) {
@@ -264,13 +267,13 @@ function listBlock(title, items, headingLevel) {
 function renderObjectListItem(item) {
   const fragment = document.createDocumentFragment();
   const title =
-    item.project ||
-    item.claim ||
-    item.requirement ||
-    item.risk ||
-    item.signal ||
-    item.title ||
-    item.name ||
+    cleanReportText(item.project) ||
+    cleanReportText(item.claim) ||
+    cleanReportText(item.requirement) ||
+    cleanReportText(item.risk) ||
+    cleanReportText(item.signal) ||
+    cleanReportText(item.title) ||
+    cleanReportText(item.name) ||
     "条目";
 
   const titleNode = document.createElement("div");
@@ -279,14 +282,14 @@ function renderObjectListItem(item) {
   fragment.append(titleNode);
 
   const detailParts = [
-    item.reason,
-    item.evidence,
-    item.summary,
-    item.description,
-    item.strength ? `强度：${item.strength}` : "",
-    item.valueLevel ? `含金量：${item.valueLevel}` : "",
-    item.severity ? `严重度：${item.severity}` : ""
-  ].filter(Boolean);
+    cleanReportValue(item.reason),
+    cleanReportValue(item.evidence),
+    cleanReportValue(item.summary),
+    cleanReportValue(item.description),
+    cleanReportText(item.strength) ? `强度：${cleanReportText(item.strength)}` : "",
+    cleanReportText(item.valueLevel) ? `含金量：${cleanReportText(item.valueLevel)}` : "",
+    cleanReportText(item.severity) ? `严重度：${cleanReportText(item.severity)}` : ""
+  ].map(formatValue).filter(Boolean);
 
   if (detailParts.length) {
     const detailNode = document.createElement("div");
@@ -297,6 +300,8 @@ function renderObjectListItem(item) {
 
   const fallback = Object.entries(item)
     .filter(([key]) => !["project", "claim", "requirement", "risk", "signal", "title", "name"].includes(key))
+    .map(([key, value]) => [key, cleanReportValue(value)])
+    .filter(([, value]) => value !== "" && value != null)
     .map(([key, value]) => `${key}: ${formatValue(value)}`)
     .join("；");
 
@@ -311,9 +316,9 @@ function renderObjectListItem(item) {
 
 function objectBlock(title, value, headingLevel) {
   const lines = [];
-  if (value?.summary) lines.push(value.summary);
-  if (value?.risk) lines.push(`风险：${value.risk}`);
-  if (value?.followUp) lines.push(`追问：${value.followUp}`);
+  if (cleanReportText(value?.summary)) lines.push(cleanReportText(value.summary));
+  if (cleanReportText(value?.risk)) lines.push(`风险：${cleanReportText(value.risk)}`);
+  if (cleanReportText(value?.followUp)) lines.push(`追问：${cleanReportText(value.followUp)}`);
 
   return listBlock(title, lines.length ? lines : ["简历未明确体现"], headingLevel);
 }
@@ -321,7 +326,7 @@ function objectBlock(title, value, headingLevel) {
 function paragraph(text, className = "") {
   const node = document.createElement("p");
   node.className = className;
-  node.textContent = text;
+  node.textContent = cleanReportText(text);
   return node;
 }
 
@@ -352,7 +357,27 @@ function getMatchScore(analysis) {
 }
 
 function formatValue(value) {
-  if (Array.isArray(value)) return value.map(formatValue).join("、");
-  if (value && typeof value === "object") return Object.values(value).map(formatValue).join("、");
-  return String(value ?? "");
+  const cleaned = cleanReportValue(value);
+  if (Array.isArray(cleaned)) return cleaned.map(formatValue).filter(Boolean).join("、");
+  if (cleaned && typeof cleaned === "object") return Object.values(cleaned).map(formatValue).filter(Boolean).join("、");
+  return cleanReportText(cleaned);
+}
+
+function cleanReportValue(value) {
+  if (Array.isArray(value)) return value.map(cleanReportValue).filter((item) => item !== "" && item != null);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .map(([key, item]) => [key, cleanReportValue(item)])
+        .filter(([, item]) => item !== "" && item != null && !(Array.isArray(item) && !item.length))
+    );
+  }
+  return cleanReportText(value);
+}
+
+function cleanReportText(value) {
+  const text = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return /^(?:null|undefined|none|n\/a|nan)$/i.test(text) ? "" : text;
 }
